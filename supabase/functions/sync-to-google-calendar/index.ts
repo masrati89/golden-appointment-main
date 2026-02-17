@@ -46,19 +46,19 @@ async function createGoogleCalendarEvent(
     throw new Error("admin_calendar_email not configured");
   }
 
-  // Parse date and time
+  // Parse date and time (stored as Israel local)
   const [year, month, day] = booking.booking_date.split("-").map(Number);
-  const [hours, minutes] = booking.booking_time.split(":").map(Number);
+  const [h, m] = booking.booking_time.split(":").map(Number);
+  const hours = h ?? 0;
+  const minutes = m ?? 0;
 
-  // Create dates in Israel timezone (UTC+2/+3)
-  // Note: Adjust timezone handling based on your needs
-  const startDate = new Date(Date.UTC(year, month - 1, day, hours - 2, minutes));
-  const endDate = new Date(startDate.getTime() + service.duration_min * 60 * 1000);
-
-  // Format for Google Calendar API (RFC3339)
-  const formatRFC3339 = (date: Date): string => {
-    return date.toISOString();
-  };
+  // Build RFC3339 in Israel timezone (+02:00)
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const startStr = `${booking.booking_date}T${pad(hours)}:${pad(minutes)}:00+02:00`;
+  const totalEndMin = hours * 60 + minutes + service.duration_min;
+  const endH = Math.floor(totalEndMin / 60) % 24;
+  const endM = totalEndMin % 60;
+  const endStr = `${booking.booking_date}T${pad(endH)}:${pad(endM)}:00+02:00`;
 
   const event = {
     summary: `${booking.customer_name} - ${service.name}`,
@@ -73,11 +73,11 @@ async function createGoogleCalendarEvent(
       .filter(Boolean)
       .join("\n"),
     start: {
-      dateTime: formatRFC3339(startDate),
+      dateTime: startStr,
       timeZone: "Asia/Jerusalem",
     },
     end: {
-      dateTime: formatRFC3339(endDate),
+      dateTime: endStr,
       timeZone: "Asia/Jerusalem",
     },
     location: settings.business_address || undefined,
@@ -91,8 +91,10 @@ async function createGoogleCalendarEvent(
     },
   };
 
+  // Insert into the admin's calendar (they must share it with the service account email)
+  const calendarId = encodeURIComponent(adminEmail);
   const response = await fetch(
-    "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+    `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`,
     {
       method: "POST",
       headers: {
@@ -116,19 +118,44 @@ async function createGoogleCalendarEvent(
 }
 
 /**
- * Get Google OAuth access token using service account or OAuth2
- * Note: This requires proper OAuth setup. For production, use service account or stored refresh token.
+ * Get Google OAuth access token: prefers refresh_token from settings (OAuth flow),
+ * then env GOOGLE_REFRESH_TOKEN, then service account.
  */
-async function getGoogleAccessToken(): Promise<string> {
-  // Option 1: Use service account (recommended for server-to-server)
+async function getGoogleAccessToken(refreshTokenFromSettings?: string | null): Promise<string> {
+  const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
+  const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
+
+  // Option 1: Use refresh token from settings (one-click OAuth for this business)
+  const refreshToken = refreshTokenFromSettings ?? Deno.env.get("GOOGLE_REFRESH_TOKEN");
+  if (refreshToken && clientId && clientSecret) {
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: "refresh_token",
+      }),
+    });
+
+    if (tokenResponse.ok) {
+      const tokenData = await tokenResponse.json();
+      return tokenData.access_token;
+    }
+    // If we had refreshTokenFromSettings and it failed, don't fall back silently
+    if (refreshTokenFromSettings) {
+      const err = await tokenResponse.text();
+      throw new Error(`Failed to refresh Google access token: ${err}`);
+    }
+  }
+
+  // Option 2: Use service account (server-to-server)
   const serviceAccountEmail = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_EMAIL");
   const serviceAccountKey = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY");
 
   if (serviceAccountEmail && serviceAccountKey) {
-    // Create JWT for service account
     const jwt = await createServiceAccountJWT(serviceAccountEmail, serviceAccountKey);
-    
-    // Exchange JWT for access token
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -141,75 +168,37 @@ async function getGoogleAccessToken(): Promise<string> {
     if (!tokenResponse.ok) {
       throw new Error("Failed to get access token from service account");
     }
-
     const tokenData = await tokenResponse.json();
     return tokenData.access_token;
   }
 
-  // Option 2: Use stored refresh token (if available)
-  const refreshToken = Deno.env.get("GOOGLE_REFRESH_TOKEN");
-  if (refreshToken) {
-    const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
-    const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
-
-    if (!clientId || !clientSecret) {
-      throw new Error("Google OAuth credentials not configured");
-    }
-
-    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        refresh_token: refreshToken,
-        grant_type: "refresh_token",
-      }),
-    });
-
-    if (!tokenResponse.ok) {
-      throw new Error("Failed to refresh access token");
-    }
-
-    const tokenData = await tokenResponse.json();
-    return tokenData.access_token;
-  }
-
-  throw new Error("No Google authentication method configured");
+  throw new Error("No Google authentication method configured (connect Google Calendar in Settings or set Service Account secrets)");
 }
 
 /**
- * Create JWT for service account authentication
- * Using jose library for proper JWT signing
+ * Create JWT for Google Service Account authentication (RS256).
+ * Credentials come from Supabase Secrets (from your JSON key file).
  */
 async function createServiceAccountJWT(
-  email: string,
-  privateKey: string
+  clientEmail: string,
+  privateKeyPem: string
 ): Promise<string> {
-  try {
-    // Import jose library dynamically
-    const { SignJWT } = await import("https://deno.land/x/jose@v4.14.4/index.ts");
-    const { parsePKCS8 } = await import("https://deno.land/x/jose@v4.14.4/index.ts");
-    
-    const now = Math.floor(Date.now() / 1000);
-    const key = await parsePKCS8(privateKey);
-    
-    const jwt = await new SignJWT({
-      scope: "https://www.googleapis.com/auth/calendar",
-    })
-      .setProtectedHeader({ alg: "RS256" })
-      .setIssuedAt(now)
-      .setIssuer(email)
-      .setAudience("https://oauth2.googleapis.com/token")
-      .setExpirationTime(now + 3600)
-      .sign(key);
-    
-    return jwt;
-  } catch (error) {
-    // Fallback: If jose is not available, use refresh token method
-    console.error("JWT creation failed, falling back to refresh token:", error);
-    throw new Error("Service account JWT creation failed - ensure jose library is available or use refresh token");
-  }
+  const { SignJWT, importPKCS8 } = await import("https://deno.land/x/jose@4.14.4/index.ts");
+
+  // Supabase Secrets may store the key with literal \n; normalize to real newlines
+  const pem = privateKeyPem.replace(/\\n/g, "\n").trim();
+  const key = await importPKCS8(pem, "RS256");
+
+  const now = Math.floor(Date.now() / 1000);
+  const jwt = await new SignJWT({ scope: "https://www.googleapis.com/auth/calendar" })
+    .setProtectedHeader({ alg: "RS256", typ: "JWT" })
+    .setIssuer(clientEmail)
+    .setAudience("https://oauth2.googleapis.com/token")
+    .setIssuedAt(now)
+    .setExpirationTime(now + 3600)
+    .sign(key);
+
+  return jwt;
 }
 
 serve(async (req) => {
@@ -276,11 +265,24 @@ serve(async (req) => {
       );
     }
 
-    // Fetch settings to get admin_calendar_email
+    // Settings for calendar target; refresh_token from business_settings (OAuth, per business)
     const { data: settings } = await supabase
       .from("settings")
-      .select("admin_calendar_email, business_name, business_address, business_phone")
+      .select("id, admin_calendar_email, business_name, business_address, business_phone")
       .maybeSingle();
+
+    const { data: businessSettings } = settings?.id
+      ? await supabase
+          .from("business_settings")
+          .select("google_calendar_refresh_token")
+          .eq("settings_id", settings.id)
+          .maybeSingle()
+      : await supabase
+          .from("business_settings")
+          .select("google_calendar_refresh_token")
+          .maybeSingle();
+
+    const refreshToken = businessSettings?.google_calendar_refresh_token ?? null;
 
     if (!settings?.admin_calendar_email) {
       await supabase.from("calendar_sync_logs").insert({
@@ -304,10 +306,10 @@ serve(async (req) => {
       );
     }
 
-    // Get Google access token
+    // Get Google access token (refresh_token from business_settings; keys from Supabase Secrets)
     let accessToken: string;
     try {
-      accessToken = await getGoogleAccessToken();
+      accessToken = await getGoogleAccessToken(refreshToken);
     } catch (error) {
       await supabase.from("calendar_sync_logs").insert({
         booking_id: bookingId,

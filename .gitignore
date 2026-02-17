@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Google Service Account keys (never commit)
+*service*account*.json
+*credentials*.json
+*-????????.json

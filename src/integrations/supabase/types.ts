@@ -257,6 +257,7 @@ export type Database = {
           facebook_url: string | null
           show_instagram: boolean | null
           show_facebook: boolean | null
+          google_calendar_connected: boolean | null
         }
         Insert: {
           admin_phone?: string | null
@@ -300,6 +301,7 @@ export type Database = {
           facebook_url?: string | null
           show_instagram?: boolean | null
           show_facebook?: boolean | null
+          google_calendar_connected?: boolean | null
         }
         Update: {
           admin_phone?: string | null
@@ -343,6 +345,28 @@ export type Database = {
           facebook_url?: string | null
           show_instagram?: boolean | null
           show_facebook?: boolean | null
+          google_calendar_connected?: boolean | null
+        }
+        Relationships: []
+      }
+      business_settings: {
+        Row: {
+          id: string
+          google_calendar_refresh_token: string | null
+          google_calendar_connected: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          google_calendar_refresh_token?: string | null
+          google_calendar_connected?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          google_calendar_refresh_token?: string | null
+          google_calendar_connected?: boolean | null
+          updated_at?: string | null
         }
         Relationships: []
       }

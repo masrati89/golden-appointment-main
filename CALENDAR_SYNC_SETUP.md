@@ -50,22 +50,27 @@ You have two options:
    - `GOOGLE_CLIENT_SECRET`
    - `GOOGLE_REFRESH_TOKEN`
 
-### 3. Supabase Environment Variables
+### 3. Supabase Secrets (from your Service Account JSON)
 
-Set these in your Supabase project settings (Settings > Edge Functions > Secrets):
+**Never commit the JSON key file.** Add it to `.gitignore`.
 
-```
-GOOGLE_SERVICE_ACCOUNT_EMAIL=your-service-account@project.iam.gserviceaccount.com
-GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----
+From your JSON key file (e.g. `devweb-calendar-5f5073ff0980.json`):
+
+1. **Supabase Dashboard** → Project **Settings** → **Edge Functions** → **Secrets**.
+2. Add two secrets:
+   - **GOOGLE_SERVICE_ACCOUNT_EMAIL** = copy the `client_email` value from the JSON.
+   - **GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY** = copy the entire `private_key` value (including `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----`). You can paste with real newlines, or use `\n` for line breaks.
+
+**Using Supabase CLI (PowerShell):**
+```powershell
+$json = Get-Content "path\to\your-key.json" -Raw | ConvertFrom-Json
+supabase secrets set GOOGLE_SERVICE_ACCOUNT_EMAIL=$($json.client_email)
+# For the key, replace newlines with \n so it stays one line:
+$key = $json.private_key -replace "`r?`n", "\n"
+supabase secrets set GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY="$key"
 ```
 
-OR
-
-```
-GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=your-client-secret
-GOOGLE_REFRESH_TOKEN=your-refresh-token
-```
+The Edge Function reads these secrets at runtime; the booking flow uses the **admin_calendar_email** from your **business settings** (Settings in the dashboard) to choose which calendar to add events to. That calendar must be **shared with the service account email** (see Google Calendar setup below).
 
 ### 4. Database Setup
 

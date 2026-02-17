@@ -3,11 +3,23 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { useSettings } from '@/hooks/useSettings';
+import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import { toast } from 'sonner';
-import { Loader2, Save, Settings, CreditCard, Calendar, Bell, Upload, X } from 'lucide-react';
+import { Loader2, Save, Settings, CreditCard, Calendar, Bell, Upload, X, CheckCircle2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+
+function GoogleIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+    </svg>
+  );
+}
 
 const tabs = [
   { id: 'general', label: 'כללי', icon: Settings },
@@ -18,22 +30,55 @@ const tabs = [
 
 export default function AdminSettings() {
   const queryClient = useQueryClient();
-  const { data: settings, isLoading } = useSettings();
+  const { user } = useAdminAuth();
+  const { data: settings, isLoading } = useSettings(user?.id);
   const [form, setForm] = useState<Record<string, any>>({});
   const [activeTab, setActiveTab] = useState('general');
 
   useEffect(() => {
     if (settings) {
-      // Initialize form with default values for new fields if they don't exist
       setForm({
         ...settings,
         show_instagram: settings.show_instagram ?? false,
         show_facebook: settings.show_facebook ?? false,
         instagram_url: settings.instagram_url ?? '',
         facebook_url: settings.facebook_url ?? '',
+        google_calendar_connected: settings.google_calendar_connected ?? false,
       });
     }
   }, [settings]);
+
+  // Handle OAuth callback query params - sync first (toast, cleanup URL), then refetch
+  // Avoids dangling promises that can cause "async response" errors on redirect/navigation
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get('connected');
+    if (connected !== '1' && connected !== '0') return;
+
+    const err = params.get('error');
+    const mounted = { current: true };
+
+    // Sync: show toast and clean URL immediately (before any async work)
+    if (connected === '1') {
+      toast.success('יומן Google חובר בהצלחה');
+    } else {
+      toast.error(err ? `חיבור יומן נכשל: ${err}` : 'חיבור יומן גוגל נכשל');
+    }
+    window.history.replaceState({}, '', window.location.pathname);
+
+    // Async: refetch settings (fire-and-forget, wrapped to avoid leaks)
+    (async () => {
+      try {
+        await queryClient.invalidateQueries({ queryKey: ['settings'] });
+      } catch (e) {
+        if (mounted.current) {
+          console.warn('OAuth callback: settings refetch failed', e);
+        }
+      }
+    })();
+
+    return () => { mounted.current = false; };
+  }, [queryClient]);
 
   // Build payload for update_settings RPC (bypasses PostgREST schema cache)
   const SETTINGS_COLUMNS = [
@@ -85,7 +130,8 @@ export default function AdminSettings() {
     },
   });
 
-  if (isLoading) return <div className="text-center py-12 text-muted-foreground">טוען...</div>;
+  if (!user) return <div className="text-center py-12 text-muted-foreground">טוען...</div>;
+  if (isLoading && !settings) return <div className="text-center py-12 text-muted-foreground">טוען...</div>;
 
   const update = (key: string, value: any) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -248,6 +294,73 @@ export default function AdminSettings() {
             <Field label="Google Calendar ID" value={form.google_calendar_id} onChange={(v) => update('google_calendar_id', v)} dir="ltr" />
             <Field label="אימייל ללוח שנה (Google Calendar Sync)" value={form.admin_calendar_email} onChange={(v) => update('admin_calendar_email', v)} dir="ltr" type="email" placeholder="admin@example.com" />
             <p className="text-xs text-muted-foreground">אימייל זה ישמש ליצירת אירועים אוטומטיים בלוח השנה של Google עבור כל הזמנה חדשה</p>
+
+            <div className="pt-2 border-t border-border/60">
+              <Label className="text-sm font-semibold mb-2 block">חיבור יומן Google</Label>
+              {form.google_calendar_connected ? (
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="inline-flex items-center gap-2 text-green-600 dark:text-green-400 font-medium">
+                    <CheckCircle2 className="w-5 h-5 shrink-0" />
+                    מחובר ליומן גוגל
+                  </span>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const { error } = await supabase
+                        .from('business_settings')
+                        .update({ google_calendar_refresh_token: null, google_calendar_connected: false })
+                        .eq('id', user?.id ?? '');
+                      if (error) {
+                        toast.error('שגיאה בהתנתקות');
+                        return;
+                      }
+                      queryClient.invalidateQueries({ queryKey: ['settings'] });
+                      setForm((f) => ({ ...f, google_calendar_connected: false }));
+                      toast.success('יומן Google התנתק');
+                    }}
+                    className="text-sm text-destructive hover:underline"
+                  >
+                    התנתק
+                  </button>
+                </div>
+              ) : !user ? (
+                <div className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-input bg-muted/50 text-muted-foreground">
+                  טוען נתונים...
+                </div>
+              ) : isLoading && !settings ? (
+                <div className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-input bg-muted/50 text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  טוען נתונים...
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+                    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+                    if (!clientId || !supabaseUrl) {
+                      toast.error('חסר הגדרת Google Client ID או Supabase URL');
+                      return;
+                    }
+                    const businessId = user.id;
+                    if (!businessId) {
+                      toast.error('נתוני משתמש לא נטענו');
+                      return;
+                    }
+                    const callbackUrl = `${supabaseUrl}/functions/v1/google-auth-callback`;
+                    const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar');
+                    const statePayload = { origin: window.location.origin, business_id: businessId };
+                    const state = btoa(JSON.stringify(statePayload));
+                    const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(callbackUrl)}&response_type=code&scope=${scope}&access_type=offline&prompt=consent&state=${encodeURIComponent(state)}`;
+                    window.location.href = url;
+                  }}
+                  className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-input bg-background hover:bg-muted/50 text-foreground font-medium transition-colors"
+                >
+                  <GoogleIcon className="w-5 h-5" />
+                  חברי יומן גוגל
+                </button>
+              )}
+            </div>
           </Section>
         )}
         </motion.div>
