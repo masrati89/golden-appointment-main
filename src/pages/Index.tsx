@@ -67,7 +67,7 @@ const Index = () => {
               <img src={settings.business_logo_url} alt={settings?.business_name || 'לוגו'} className="h-16 md:h-20 mx-auto object-contain mb-2" />
             ) : (
               <h1 className={`text-3xl md:text-4xl lg:text-5xl font-bold ${bgImageUrl ? 'text-white' : 'text-foreground'}`}>
-                {settings?.business_name || 'GlamourBook'}
+                {settings?.business_name || 'סטודיו אותנטי'}
               </h1>
             )}
             <p className={`text-sm md:text-base ${bgImageUrl ? 'text-white/80' : 'text-muted-foreground'}`}>

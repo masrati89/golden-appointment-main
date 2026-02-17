@@ -2,8 +2,27 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
+// Debug: Check for missing environment variables BEFORE creating client
+if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) {
+  console.error('=== MISSING SUPABASE ENV VARIABLES ===');
+  console.error('VITE_SUPABASE_URL:', import.meta.env.VITE_SUPABASE_URL ? '✓ Set' : '✗ MISSING');
+  console.error('VITE_SUPABASE_PUBLISHABLE_KEY:', import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ? '✓ Set' : '✗ MISSING');
+  console.error('All env vars:', Object.keys(import.meta.env).filter(k => k.startsWith('VITE_SUPABASE')));
+  console.error('=======================================');
+  throw new Error(
+    'Missing required Supabase environment variables. ' +
+    'Please check your .env file contains VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY'
+  );
+}
+
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+// Debug: Log client initialization (without exposing full key)
+console.log('=== Supabase Client Initialization ===');
+console.log('URL:', SUPABASE_URL);
+console.log('Key (first 20 chars):', SUPABASE_PUBLISHABLE_KEY?.substring(0, 20) + '...');
+console.log('=====================================');
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";

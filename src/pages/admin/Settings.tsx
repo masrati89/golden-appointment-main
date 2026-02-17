@@ -8,6 +8,7 @@ import { Loader2, Save, Settings, CreditCard, Calendar, Bell, Upload, X } from '
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { StorageDebug } from '@/components/StorageDebug';
 
 const tabs = [
   { id: 'general', label: 'כללי', icon: Settings },
@@ -92,6 +93,9 @@ export default function AdminSettings() {
   return (
     <div className="space-y-6 max-w-3xl pb-24">
       <h1 className="text-3xl font-bold text-foreground">הגדרות</h1>
+
+      {/* Storage Debug Component - Temporary for debugging */}
+      <StorageDebug />
 
       {/* Tabs — flex-wrap so all fit without horizontal scroll */}
       <div className="glass-card p-1.5 flex flex-wrap gap-1.5">
@@ -322,6 +326,8 @@ function ToggleRow({
 function LogoUploadField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const queryClient = useQueryClient();
+  const { data: settings } = useSettings();
 
   const handleUpload = async (file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -334,17 +340,65 @@ function LogoUploadField({ value, onChange }: { value: string; onChange: (v: str
     }
     setUploading(true);
     try {
-      const ext = file.name.split('.').pop();
-      const path = `logo-${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from('logos').upload(path, file, { upsert: true });
-      if (error) throw error;
-      const { data: { publicUrl } } = supabase.storage.from('logos').getPublicUrl(path);
+      // Sanitize filename: remove special characters, keep only alphanumeric and dots
+      const sanitizedName = file.name.replace(/[^a-zA-Z0-9.]/g, '');
+      const filePath = `public/${Date.now()}${sanitizedName}`;
+      
+      // Upload to 'upload' bucket
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('upload')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) {
+        // Detailed error logging for debugging
+        console.error('Logo upload error:', {
+          message: uploadError.message,
+          statusCode: uploadError.statusCode,
+          error: uploadError.error,
+          details: uploadError,
+        });
+        throw uploadError;
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage.from('upload').getPublicUrl(filePath);
+      
+      if (!publicUrl) {
+        throw new Error('לא ניתן לקבל כתובת URL ציבורית');
+      }
+
+      // Update form state
       onChange(publicUrl);
+      
+      // Immediately update database
+      if (settings?.id) {
+        const { error: updateError } = await supabase.rpc('update_settings', {
+          data: { id: settings.id, business_logo_url: publicUrl },
+        });
+        if (updateError) {
+          console.error('Database update error:', {
+            message: updateError.message,
+            statusCode: updateError.statusCode,
+            error: updateError.error,
+            details: updateError,
+          });
+          toast.warning('הלוגו הועלה אך לא עודכן במסד הנתונים. אנא שמור הגדרות ידנית.');
+        } else {
+          queryClient.invalidateQueries({ queryKey: ['settings'] });
+        }
+      }
+
       toast.success('הלוגו הועלה בהצלחה');
-    } catch {
-      toast.error('שגיאה בהעלאת הלוגו');
+    } catch (error: any) {
+      // User-friendly error message
+      const errorMessage = error?.message || 'שגיאה לא ידועה בהעלאת הלוגו';
+      console.error('Logo upload failed:', error);
+      toast.error(`שגיאה בהעלאת הלוגו: ${errorMessage}`);
     } finally {
       setUploading(false);
+      if (fileRef.current) {
+        fileRef.current.value = '';
+      }
     }
   };
 
@@ -390,6 +444,8 @@ function LogoUploadField({ value, onChange }: { value: string; onChange: (v: str
 function BackgroundImageUploadField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const queryClient = useQueryClient();
+  const { data: settings } = useSettings();
 
   const handleUpload = async (file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -402,18 +458,65 @@ function BackgroundImageUploadField({ value, onChange }: { value: string; onChan
     }
     setUploading(true);
     try {
-      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-      const uniqueName = `${crypto.randomUUID()}.${ext}`;
-      const { error } = await supabase.storage.from('uploads').upload(uniqueName, file, { upsert: false });
-      if (error) throw error;
-      const { data: { publicUrl } } = supabase.storage.from('uploads').getPublicUrl(uniqueName);
+      // Sanitize filename: remove special characters, keep only alphanumeric and dots
+      const sanitizedName = file.name.replace(/[^a-zA-Z0-9.]/g, '');
+      const filePath = `public/${Date.now()}${sanitizedName}`;
+      
+      // Upload to 'upload' bucket
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('upload')
+        .upload(filePath, file, { upsert: false });
+
+      if (uploadError) {
+        // Detailed error logging for debugging
+        console.error('Background image upload error:', {
+          message: uploadError.message,
+          statusCode: uploadError.statusCode,
+          error: uploadError.error,
+          details: uploadError,
+        });
+        throw uploadError;
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage.from('upload').getPublicUrl(filePath);
+      
+      if (!publicUrl) {
+        throw new Error('לא ניתן לקבל כתובת URL ציבורית');
+      }
+
+      // Update form state
       onChange(publicUrl);
+      
+      // Immediately update database
+      if (settings?.id) {
+        const { error: updateError } = await supabase.rpc('update_settings', {
+          data: { id: settings.id, background_image_url: publicUrl },
+        });
+        if (updateError) {
+          console.error('Database update error:', {
+            message: updateError.message,
+            statusCode: updateError.statusCode,
+            error: updateError.error,
+            details: updateError,
+          });
+          toast.warning('תמונת הרקע הועלתה אך לא עודכנה במסד הנתונים. אנא שמור הגדרות ידנית.');
+        } else {
+          queryClient.invalidateQueries({ queryKey: ['settings'] });
+        }
+      }
+
       toast.success('תמונת הרקע הועלתה בהצלחה');
-    } catch {
-      toast.error('שגיאה בהעלאת תמונת הרקע');
+    } catch (error: any) {
+      // User-friendly error message
+      const errorMessage = error?.message || 'שגיאה לא ידועה בהעלאת תמונת הרקע';
+      console.error('Background image upload failed:', error);
+      toast.error(`שגיאה בהעלאת תמונת הרקע: ${errorMessage}`);
     } finally {
       setUploading(false);
-      fileRef.current && (fileRef.current.value = '');
+      if (fileRef.current) {
+        fileRef.current.value = '';
+      }
     }
   };
 
