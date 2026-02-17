@@ -14,7 +14,7 @@ const ServiceCard = ({ name, description, duration, price, imageUrl, onClick }: 
   return (
     <div
       onClick={onClick}
-      className="bg-card rounded-2xl shadow-md hover:shadow-lg transition-all duration-300 hover:scale-[1.03] cursor-pointer overflow-hidden animate-fade-in"
+      className="bg-card rounded-2xl shadow-gold-md hover:shadow-gold-lg transition-all duration-300 hover:scale-[1.03] cursor-pointer overflow-hidden animate-fade-in"
     >
       <div className="aspect-video w-full">
         {imageUrl ? (

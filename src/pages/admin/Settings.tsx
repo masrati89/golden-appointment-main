@@ -37,7 +37,7 @@ export default function AdminSettings() {
 
   // Build payload for update_settings RPC (bypasses PostgREST schema cache)
   const SETTINGS_COLUMNS = [
-    'id', 'admin_phone', 'background_image_url', 'bank_account', 'bank_branch', 'bank_name',
+    'id', 'admin_phone', 'admin_calendar_email', 'background_image_url', 'bank_account', 'bank_branch', 'bank_name',
     'bit_business_name', 'bit_payment_url', 'bit_phone_number', 'business_address',
     'business_logo_url', 'business_name', 'business_phone', 'deposit_fixed_amount',
     'deposit_percentage', 'google_calendar_id', 'is_deposit_active', 'max_advance_days',
@@ -246,6 +246,8 @@ export default function AdminSettings() {
             <Field label="שעות תזכורת לפני תור" value={form.send_reminder_hours} onChange={(v) => update('send_reminder_hours', Number(v))} type="number" />
             <Field label="WhatsApp API Token" value={form.whatsapp_api_token} onChange={(v) => update('whatsapp_api_token', v)} dir="ltr" />
             <Field label="Google Calendar ID" value={form.google_calendar_id} onChange={(v) => update('google_calendar_id', v)} dir="ltr" />
+            <Field label="אימייל ללוח שנה (Google Calendar Sync)" value={form.admin_calendar_email} onChange={(v) => update('admin_calendar_email', v)} dir="ltr" type="email" placeholder="admin@example.com" />
+            <p className="text-xs text-muted-foreground">אימייל זה ישמש ליצירת אירועים אוטומטיים בלוח השנה של Google עבור כל הזמנה חדשה</p>
           </Section>
         )}
         </motion.div>

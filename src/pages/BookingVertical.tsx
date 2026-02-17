@@ -371,7 +371,7 @@ const BookingVertical = () => {
                   }}
                   className={`glass-card p-3 text-center transition-all duration-200 active:scale-[0.97] border-2 rounded-2xl shadow-sm
                     ${selectedService?.id === service.id
-                      ? 'border-primary bg-primary/10 shadow-md'
+                      ? 'border-primary bg-primary/10 shadow-gold-md'
                       : 'border-transparent hover:border-primary/30'}`}
                 >
                   <h4 className="font-semibold text-foreground text-sm leading-tight">{service.name}</h4>
@@ -484,7 +484,7 @@ const BookingVertical = () => {
               </div>
               <button
                 type="submit"
-                className="w-full h-12 rounded-xl text-base font-semibold bg-primary hover:bg-primary/90 text-primary-foreground transition-all duration-200 shadow-md hover:shadow-lg active:scale-[0.98] flex items-center justify-center gap-2 min-h-[48px]"
+                className="w-full h-12 rounded-xl text-base font-semibold bg-primary hover:bg-primary/90 text-primary-foreground transition-all duration-200 shadow-gold-md hover:shadow-gold-lg active:scale-[0.98] flex items-center justify-center gap-2 min-h-[48px]"
               >
                 <Check className="w-5 h-5" />
                 המשך לתשלום
@@ -536,7 +536,7 @@ const BookingVertical = () => {
                         }
                       }}
                       className={`w-full text-right py-3 px-3 rounded-2xl border-2 transition-all duration-200 min-h-[52px] shadow-sm
-                        ${isSelected ? 'border-primary bg-primary/5 shadow-md' : 'border-border hover:border-primary/40'}`}
+                        ${isSelected ? 'border-primary bg-primary/5 shadow-gold-md' : 'border-border hover:border-primary/40'}`}
                     >
                       <div className="flex items-center gap-2.5">
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'}`}>
@@ -618,7 +618,7 @@ const BookingVertical = () => {
                   <button
                     onClick={() => createBooking.mutate(selectedPayment)}
                     disabled={createBooking.isPending}
-                    className="w-full h-12 rounded-2xl text-base font-semibold bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg active:scale-[0.97] flex items-center justify-center gap-2 min-h-[48px]"
+                    className="w-full h-12 rounded-2xl text-base font-semibold bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-gold-md hover:shadow-gold-lg active:scale-[0.97] flex items-center justify-center gap-2 min-h-[48px]"
                   >
                     {createBooking.isPending ? (
                       <><Loader2 className="w-5 h-5 animate-spin" />מאשר...</>
@@ -630,7 +630,7 @@ const BookingVertical = () => {
                   <button
                     onClick={() => createBooking.mutate('stripe')}
                     disabled={createBooking.isPending}
-                    className="w-full h-12 rounded-2xl text-base font-semibold bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg active:scale-[0.97] flex items-center justify-center gap-2 min-h-[48px]"
+                    className="w-full h-12 rounded-2xl text-base font-semibold bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-gold-md hover:shadow-gold-lg active:scale-[0.97] flex items-center justify-center gap-2 min-h-[48px]"
                   >
                     {createBooking.isPending ? (
                       <><Loader2 className="w-5 h-5 animate-spin" />יוצר הזמנה...</>

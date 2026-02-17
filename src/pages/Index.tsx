@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Clock, CheckCircle, Instagram, Facebook } from 'lucide-react';
+import { Sparkles, Calendar, Heart, Instagram, Facebook, ArrowRight, ArrowDown } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Header from '@/components/Header';
 import BottomNav from '@/components/BottomNav';
@@ -45,12 +45,12 @@ const Index = () => {
       description: 'בחרי מתוך מגוון הטיפולים שלנו',
     },
     {
-      icon: Clock,
+      icon: Calendar,
       title: 'בחרי זמן',
       description: 'מצאי את השעה הנוחה עבורך',
     },
     {
-      icon: CheckCircle,
+      icon: Heart,
       title: 'קבלי אישור',
       description: 'קבלי אישור מיידי ותזכורת',
     },
@@ -81,13 +81,13 @@ const Index = () => {
         className="flex-1 flex flex-col justify-center min-h-0 w-full px-4 sm:px-6 md:px-8 lg:px-12 overflow-y-auto z-10 relative"
         style={{ 
           paddingTop: 'max(calc(env(safe-area-inset-top, 0px) + 3.5rem), 3.5rem)', 
-          paddingBottom: 'max(calc(env(safe-area-inset-bottom, 0px) + 6rem), 6rem)' 
+          paddingBottom: 'max(calc(env(safe-area-inset-bottom, 0px) + 7rem), 7rem)' 
         }}
       >
-        <div className="w-full max-w-7xl mx-auto flex flex-col justify-center min-h-full gap-y-8">
-          {/* Hero Section - Perfectly centered */}
+        <div className="w-full max-w-7xl mx-auto flex flex-col justify-center items-center min-h-full gap-y-6 md:gap-y-8 py-4">
+          {/* Hero Section - Perfectly centered with balanced bottom margin */}
           <motion.section
-            className="text-center space-y-2 flex-shrink-0"
+            className="text-center space-y-2 flex-shrink-0 mb-8 md:mb-10"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
@@ -108,51 +108,140 @@ const Index = () => {
             </p>
           </motion.section>
 
-          {/* 3 instruction boxes - Below hero with equal spacing */}
-          <section className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 md:gap-6 flex-shrink-0">
+          {/* Process Guide - Luxury Compact with balanced vertical padding */}
+          <section className="flex flex-col md:flex-row items-center justify-center gap-y-4 md:gap-y-0 flex-shrink-0 px-2 md:px-4 w-full py-6 md:py-8">
             {steps.map((step, i) => {
-              const Icon = step.icon;
+              const stepNumber = String(i + 1).padStart(2, '0');
+              const isLast = i === steps.length - 1;
+              
               return (
-                <motion.div
-                  key={i}
-                  data-tour={`step-${i + 1}`}
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: 0.1 + i * 0.08 }}
-                  className="w-full glass-card px-4 sm:px-5 md:px-6 py-6 sm:py-7 md:py-8 text-right md:text-center flex md:flex-col items-center md:items-center gap-4 md:gap-3 cursor-default overflow-hidden"
-                >
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-xl bg-primary/15 flex items-center justify-center flex-shrink-0">
-                    <Icon className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0 md:flex-none w-full">
-                    <div className="flex md:justify-center items-center gap-2 mb-1">
-                      <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center flex-shrink-0">
-                        {i + 1}
-                      </span>
-                      <h3 className={`text-lg md:text-xl font-bold text-foreground line-clamp-2 ${bgImageUrl ? 'text-white' : ''}`}>
-                        {step.title}
-                      </h3>
+                <div key={i} className="flex flex-col md:flex-row items-center">
+                  {/* Step Content */}
+                  <motion.div
+                    data-tour={`step-${i + 1}`}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ 
+                      duration: 0.5, 
+                      delay: i * 0.15,
+                      ease: 'easeOut'
+                    }}
+                    className="flex flex-col items-center text-center max-w-xs px-2 md:px-3"
+                  >
+                    {/* Step Content with Icon and Number */}
+                    <div className="flex flex-col items-center w-full">
+                      {/* Number - Subtle guide above */}
+                      <motion.span
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ 
+                          duration: 0.4, 
+                          delay: i * 0.15 + 0.1,
+                          ease: 'easeOut'
+                        }}
+                        className={`text-xs font-serif font-light mb-1 ${bgImageUrl ? 'text-[#D4B896]/60' : 'text-[#D4B896]/50'}`}
+                        style={{ 
+                          fontFamily: 'Georgia, "Times New Roman", serif',
+                          letterSpacing: '0.1em'
+                        }}
+                      >
+                        {stepNumber}
+                      </motion.span>
+                      
+                      {/* Title with Icon - Icon on the right (RTL) */}
+                      <div className="flex items-center gap-2 mb-3">
+                        <h3 
+                          className={`text-lg md:text-xl lg:text-2xl font-bold leading-tight ${bgImageUrl ? 'text-white' : 'text-[#2D3440]'}`}
+                        >
+                          {step.title}
+                        </h3>
+                        {/* Elegant Icon with Gold Shadow */}
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ 
+                            duration: 0.4, 
+                            delay: i * 0.15 + 0.2,
+                            ease: 'easeOut'
+                          }}
+                          className="shadow-gold-sm"
+                        >
+                          <step.icon 
+                            size={24} 
+                            className="text-[#B8956A]"
+                            strokeWidth={1.5}
+                          />
+                        </motion.div>
+                      </div>
+                      
+                      {/* Step Description */}
+                      <p 
+                        className={`text-sm md:text-base leading-relaxed ${bgImageUrl ? 'text-white/70' : 'text-[#2D3440]/60'}`}
+                        style={{ lineHeight: '1.6' }}
+                      >
+                        {step.description}
+                      </p>
                     </div>
-                    <p className={`text-sm md:text-base text-muted-foreground line-clamp-2 ${bgImageUrl ? 'text-white/80' : ''}`}>
-                      {step.description}
-                    </p>
-                  </div>
-                </motion.div>
+                  </motion.div>
+
+                  {/* Enhanced Arrow Between Steps */}
+                  {!isLast && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.5 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ 
+                        duration: 0.5, 
+                        delay: i * 0.15 + 0.3,
+                        ease: 'easeOut'
+                      }}
+                      className="flex items-center justify-center my-5 md:my-0 md:mx-4 lg:mx-8 relative z-10"
+                    >
+                      {/* Desktop: Horizontal Arrow */}
+                      <motion.div
+                        initial={{ x: -10, opacity: 0 }}
+                        animate={{ x: 0, opacity: 1 }}
+                        transition={{ 
+                          duration: 0.4, 
+                          delay: i * 0.15 + 0.4,
+                          ease: 'easeOut'
+                        }}
+                      >
+                        <ArrowRight 
+                          className="hidden md:block w-5 h-5 lg:w-6 lg:h-6 text-[#B8956A]"
+                          strokeWidth={2}
+                        />
+                      </motion.div>
+                      {/* Mobile: Vertical Arrow */}
+                      <motion.div
+                        initial={{ y: -10, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ 
+                          duration: 0.4, 
+                          delay: i * 0.15 + 0.4,
+                          ease: 'easeOut'
+                        }}
+                      >
+                        <ArrowDown 
+                          className="md:hidden w-5 h-5 text-[#B8956A]"
+                          strokeWidth={2}
+                        />
+                      </motion.div>
+                    </motion.div>
+                  )}
+                </div>
               );
             })}
           </section>
 
-          {/* CTA Button - Below instruction boxes with equal spacing */}
-          <motion.section
-            className="text-center flex-shrink-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3, delay: 0.5 }}
-          >
-            <button
+          {/* CTA Button - Clear destination with balanced top margin */}
+          <div className="text-center flex-shrink-0 mt-6 md:mt-8 relative z-10">
+            <motion.button
               onClick={handleBookAppointment}
               disabled={isCheckingAuth}
-              className="h-12 sm:h-14 md:h-16 px-8 sm:px-10 md:px-12 lg:px-16 rounded-xl text-base sm:text-lg md:text-xl font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-md md:shadow-lg lg:hover:shadow-xl lg:hover:scale-105 transition-all duration-200 active:scale-[0.97] min-w-[200px] sm:min-w-[240px] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 mx-auto"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3, delay: 0.5 }}
+              className="h-12 sm:h-14 md:h-16 px-8 sm:px-10 md:px-12 lg:px-16 rounded-xl text-base sm:text-lg md:text-xl font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-gold-md md:shadow-gold-lg lg:hover:shadow-gold-xl lg:hover:scale-105 transition-all duration-200 active:scale-[0.97] min-w-[200px] sm:min-w-[240px] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 mx-auto"
             >
               {isCheckingAuth ? (
                 <>
@@ -162,13 +251,13 @@ const Index = () => {
               ) : (
                 'התחילי עכשיו'
               )}
-            </button>
-          </motion.section>
+            </motion.button>
+          </div>
 
-          {/* Social below CTA with proper spacing */}
+          {/* Social below CTA with balanced spacing */}
           {(settings?.show_instagram || settings?.show_facebook) && (
             <motion.section
-              className="flex items-center justify-center gap-4 sm:gap-5 flex-shrink-0"
+              className="flex items-center justify-center gap-4 sm:gap-5 flex-shrink-0 mt-4 md:mt-6 mb-4"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3, delay: 0.6 }}

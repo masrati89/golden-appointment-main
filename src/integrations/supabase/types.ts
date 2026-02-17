@@ -216,6 +216,7 @@ export type Database = {
       settings: {
         Row: {
           admin_phone: string | null
+          admin_calendar_email: string | null
           background_image_url: string | null
           bank_account: string | null
           bank_branch: string | null

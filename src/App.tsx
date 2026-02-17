@@ -13,6 +13,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import { AppLoader } from "@/components/AppLoader";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { RouteTransitionLoader } from "@/components/RouteTransitionLoader";
+import { AmbientBackground } from "@/components/AmbientBackground";
 import Index from "./pages/Index";
 
 // Lazy-loaded routes
@@ -47,6 +48,9 @@ const App = () => {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
+        {/* Ambient Golden Background - Luxury depth effect */}
+        <AmbientBackground />
+        
         {/* Initial Splash Screen - Shows once per session (inside QueryClientProvider) */}
         <LoadingScreen />
         
