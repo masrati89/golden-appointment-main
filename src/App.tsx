@@ -34,18 +34,26 @@ const ClientDashboard = lazy(() => import("./pages/dashboard/ClientDashboard"));
 const queryClient = new QueryClient();
 
 /** Initial boot + lazy chunk load: premium AppLoader (no per-page loader on client nav) */
-const App = () => (
-  <ErrorBoundary>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <AdminAuthProvider>
-          <BookingProvider>
-            <BrowserRouter>
-              <ClientAuthProvider>
-                <Suspense fallback={<AppLoader />}>
-                  <Routes>
+const App = () => {
+  // Mobile Debug: Log app initialization
+  console.log('[Mobile Debug] ========================================');
+  console.log('[Mobile Debug] App component initializing');
+  console.log('[Mobile Debug] Current URL:', window.location.href);
+  console.log('[Mobile Debug] User Agent:', navigator.userAgent);
+  console.log('[Mobile Debug] ========================================');
+
+  return (
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <AdminAuthProvider>
+            <BookingProvider>
+              <BrowserRouter>
+                <ClientAuthProvider>
+                  <Suspense fallback={<AppLoader />}>
+                    <Routes>
                     {/* Public routes */}
                     <Route path="/" element={<Index />} />
                     <Route path="/booking-menu" element={<BookingVertical />} />
@@ -95,15 +103,16 @@ const App = () => (
                     </Route>
 
                     <Route path="*" element={<NotFound />} />
-                  </Routes>
-                </Suspense>
-              </ClientAuthProvider>
-            </BrowserRouter>
-          </BookingProvider>
-        </AdminAuthProvider>
-      </TooltipProvider>
-    </QueryClientProvider>
-  </ErrorBoundary>
-);
+                    </Routes>
+                  </Suspense>
+                </ClientAuthProvider>
+              </BrowserRouter>
+            </BookingProvider>
+          </AdminAuthProvider>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
+  );
+};
 
 export default App;

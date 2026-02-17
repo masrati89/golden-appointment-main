@@ -2,35 +2,61 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-// Debug: Check for missing environment variables BEFORE creating client
-if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) {
-  console.error('=== MISSING SUPABASE ENV VARIABLES ===');
-  console.error('VITE_SUPABASE_URL:', import.meta.env.VITE_SUPABASE_URL ? '✓ Set' : '✗ MISSING');
-  console.error('VITE_SUPABASE_PUBLISHABLE_KEY:', import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ? '✓ Set' : '✗ MISSING');
-  console.error('All env vars:', Object.keys(import.meta.env).filter(k => k.startsWith('VITE_SUPABASE')));
-  console.error('=======================================');
-  throw new Error(
-    'Missing required Supabase environment variables. ' +
-    'Please check your .env file contains VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY'
-  );
-}
+// Mobile Debug: Log initialization start
+console.log('[Mobile Debug] Supabase client initialization started');
+console.log('[Mobile Debug] Environment check:', {
+  hasUrl: !!import.meta.env.VITE_SUPABASE_URL,
+  hasKey: !!import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+  allEnvKeys: Object.keys(import.meta.env).filter(k => k.startsWith('VITE_SUPABASE')),
+});
 
+// Safe environment variable access
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
+// Check for missing environment variables BEFORE creating client
+if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+  const errorMsg = 'Missing required Supabase environment variables. ' +
+    'Please check your .env file contains VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY';
+  
+  console.error('[Mobile Debug] === MISSING SUPABASE ENV VARIABLES ===');
+  console.error('[Mobile Debug] VITE_SUPABASE_URL:', SUPABASE_URL ? '✓ Set' : '✗ MISSING');
+  console.error('[Mobile Debug] VITE_SUPABASE_PUBLISHABLE_KEY:', SUPABASE_PUBLISHABLE_KEY ? '✓ Set' : '✗ MISSING');
+  console.error('[Mobile Debug] All env vars:', Object.keys(import.meta.env).filter(k => k.startsWith('VITE_SUPABASE')));
+  console.error('[Mobile Debug] =======================================');
+  
+  // Always throw in development, but log more info in production
+  throw new Error(errorMsg);
+}
+
 // Debug: Log client initialization (without exposing full key)
-console.log('=== Supabase Client Initialization ===');
-console.log('URL:', SUPABASE_URL);
-console.log('Key (first 20 chars):', SUPABASE_PUBLISHABLE_KEY?.substring(0, 20) + '...');
-console.log('=====================================');
+console.log('[Mobile Debug] === Supabase Client Initialization ===');
+console.log('[Mobile Debug] URL:', SUPABASE_URL ? `${SUPABASE_URL.substring(0, 30)}...` : 'MISSING');
+console.log('[Mobile Debug] Key (first 20 chars):', SUPABASE_PUBLISHABLE_KEY ? SUPABASE_PUBLISHABLE_KEY.substring(0, 20) + '...' : 'MISSING');
+console.log('[Mobile Debug] =====================================');
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+// Safe localStorage access for mobile
+let storage: Storage | null = null;
+try {
+  if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+    storage = localStorage;
+    console.log('[Mobile Debug] localStorage available');
+  } else {
+    console.warn('[Mobile Debug] localStorage not available (SSR or disabled)');
+  }
+} catch (e) {
+  console.warn('[Mobile Debug] localStorage access error:', e);
+}
+
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: localStorage,
-    persistSession: true,
+    storage: storage || undefined,
+    persistSession: !!storage,
     autoRefreshToken: true,
   }
 });
+
+console.log('[Mobile Debug] Supabase client created successfully');

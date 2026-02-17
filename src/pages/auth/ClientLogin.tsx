@@ -25,6 +25,8 @@ export default function ClientLogin() {
 
   // Redirect if already authenticated
   useEffect(() => {
+    console.log('[Mobile Debug] ClientLogin: Auth state:', { isAuthenticated, isLoading, nextParam });
+    
     if (isAuthenticated && !isLoading) {
       // Priority: next param > pending booking > location state > default dashboard
       const redirectTo = nextParam 
@@ -32,6 +34,15 @@ export default function ClientLogin() {
         : hasPendingBookingState() 
           ? '/booking-menu' // Restore booking flow
           : location.state?.from || '/dashboard';
+      
+      console.log('[Mobile Debug] ClientLogin: Redirecting to:', redirectTo);
+      
+      // Prevent infinite loops by checking if we're already on the target route
+      if (window.location.pathname === redirectTo) {
+        console.warn('[Mobile Debug] ClientLogin: Already on target route, skipping redirect');
+        return;
+      }
+      
       navigate(redirectTo, { replace: true });
     }
   }, [isAuthenticated, isLoading, navigate, location, nextParam]);

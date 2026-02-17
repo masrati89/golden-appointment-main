@@ -21,30 +21,50 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
   const initDone = useRef(false);
 
   useEffect(() => {
-    if (initDone.current) return;
+    if (initDone.current) {
+      console.log('[Mobile Debug] ClientAuthContext: Already initialized, skipping');
+      return;
+    }
     initDone.current = true;
 
+    console.log('[Mobile Debug] ClientAuthContext: Starting initialization');
     let cancelled = false;
 
     const timeoutId = setTimeout(() => {
       if (cancelled) return;
+      console.log('[Mobile Debug] ClientAuthContext: Loading timeout reached');
       setIsLoading(false);
     }, 3000);
 
     async function initSession() {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (cancelled) return;
+        console.log('[Mobile Debug] ClientAuthContext: Checking session...');
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (cancelled) {
+          console.log('[Mobile Debug] ClientAuthContext: Cancelled during session check');
+          return;
+        }
+        
+        if (error) {
+          console.error('[Mobile Debug] ClientAuthContext: Session check error:', error);
+          return;
+        }
+        
         if (session?.user) {
+          console.log('[Mobile Debug] ClientAuthContext: Session found, user:', session.user.email);
           setUser(session.user);
           setIsAuthenticated(true);
+        } else {
+          console.log('[Mobile Debug] ClientAuthContext: No session found');
         }
-      } catch {
-        // ignore
+      } catch (err) {
+        console.error('[Mobile Debug] ClientAuthContext: Exception during initSession:', err);
       } finally {
         if (!cancelled) {
           clearTimeout(timeoutId);
           setIsLoading(false);
+          console.log('[Mobile Debug] ClientAuthContext: Initialization complete');
         }
       }
     }
@@ -55,24 +75,36 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
     // This is just for session initialization
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'INITIAL_SESSION') return;
+      console.log('[Mobile Debug] ClientAuthContext: Auth state change:', event, session?.user?.email || 'no user');
+      
+      if (event === 'INITIAL_SESSION') {
+        console.log('[Mobile Debug] ClientAuthContext: Ignoring INITIAL_SESSION event');
+        return;
+      }
       
       if (!session?.user) {
+        // Session ended (logout or expired)
+        console.log('[Mobile Debug] ClientAuthContext: Session ended, clearing state');
         setUser(null);
         setIsAuthenticated(false);
+        // Don't navigate here - let the component handle it
+        // This prevents navigation loops and 404s
         return;
       }
 
+      console.log('[Mobile Debug] ClientAuthContext: Setting authenticated user:', session.user.email);
       setUser(session.user);
       setIsAuthenticated(true);
 
       // Handle token refresh
       if (event === 'TOKEN_REFRESHED') {
+        console.log('[Mobile Debug] ClientAuthContext: Token refreshed');
         // Session refreshed, user stays logged in
       }
     });
 
     return () => {
+      console.log('[Mobile Debug] ClientAuthContext: Cleaning up');
       cancelled = true;
       clearTimeout(timeoutId);
       subscription.unsubscribe();
@@ -127,11 +159,20 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setIsAuthenticated(false);
-    // Navigation will be handled by the component using this hook
-    window.location.href = '/login';
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+      setIsAuthenticated(false);
+      // Use window.location.href for full page reload to clear all state
+      // Redirect to home page (/) instead of /login to avoid 404s
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Even on error, clear local state and redirect
+      setUser(null);
+      setIsAuthenticated(false);
+      window.location.href = '/';
+    }
   };
 
   return (

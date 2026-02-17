@@ -105,9 +105,15 @@ export default function ClientDashboard() {
   };
 
   const handleLogout = async () => {
-    await logout();
-    toast.success('התנתקת בהצלחה');
-    navigate('/login', { replace: true });
+    try {
+      toast.success('מתנתק...', { duration: 1000 });
+      await logout();
+      // logout() already handles navigation via window.location.href
+      // No need for additional navigate call
+    } catch (error) {
+      console.error('Logout error:', error);
+      toast.error('שגיאה בהתנתקות');
+    }
   };
 
   if (authLoading) {

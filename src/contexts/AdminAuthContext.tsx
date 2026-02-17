@@ -66,8 +66,11 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'INITIAL_SESSION') return;
       if (!session?.user) {
+        // Session ended (logout or expired)
         setUser(null);
         setIsAuthenticated(false);
+        // Don't navigate here - let the component handle it
+        // This prevents navigation loops and 404s
         return;
       }
       checkIsAdmin(session.user.id).then((isAdmin) => {
