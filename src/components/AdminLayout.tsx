@@ -59,7 +59,7 @@ export default function AdminLayout() {
           <LogOut className="w-5 h-5" />
         </button>
         <button onClick={() => navigate('/')} className="font-bold text-lg text-foreground hover:text-primary transition-colors">
-          {settings?.business_name || 'סטודיו אלגנט'}
+          {settings?.business_name || 'מכון היופי שלך'}
         </button>
         <button onClick={() => navigate('/')} className="p-2 hover:bg-secondary rounded-lg text-muted-foreground hover:text-primary min-w-[48px] min-h-[48px] flex items-center justify-center transition-colors">
           <Home className="w-5 h-5" />
@@ -70,7 +70,7 @@ export default function AdminLayout() {
       <aside className="hidden lg:block fixed top-0 right-0 h-full w-64 glass-card rounded-none border-l border-border z-40">
         <div className="h-14 border-b border-border flex items-center justify-between px-6">
           <button onClick={() => navigate('/')} className="font-bold text-xl text-foreground hover:text-primary transition-colors">
-            {settings?.business_name || 'סטודיו אלגנט'}
+            {settings?.business_name || 'מכון היופי שלך'}
           </button>
           <button onClick={() => navigate('/')} className="p-1 hover:bg-secondary rounded-lg text-muted-foreground hover:text-primary transition-colors">
             <Home className="w-5 h-5" />

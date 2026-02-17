@@ -755,7 +755,7 @@ const BookingWizard = () => {
         <div className="flex-1 overflow-y-auto scrollbar-hide p-5">
           {step === 0 && (
             <WelcomeScreen
-              businessName={settings?.business_name || 'סטודיו אלגנט'}
+              businessName={settings?.business_name || 'מכון היופי שלך'}
               logoUrl={settings?.business_logo_url}
               onStart={() => setStep(1)}
             />

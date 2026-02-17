@@ -36,7 +36,7 @@ export function AppLoader({ logoUrl, businessName }: AppLoaderProps) {
           />
         ) : (
           <span className="text-xl font-bold text-foreground/80 tracking-tight">
-            {businessName || 'סטודיו אלגנט'}
+            {businessName || 'מכון היופי שלך'}
           </span>
         )}
       </motion.div>

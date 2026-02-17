@@ -11,6 +11,8 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ClientProtectedRoute } from "@/components/ClientProtectedRoute";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { AppLoader } from "@/components/AppLoader";
+import { LoadingScreen } from "@/components/LoadingScreen";
+import { RouteTransitionLoader } from "@/components/RouteTransitionLoader";
 import Index from "./pages/Index";
 
 // Lazy-loaded routes
@@ -45,12 +47,18 @@ const App = () => {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
+        {/* Initial Splash Screen - Shows once per session (inside QueryClientProvider) */}
+        <LoadingScreen />
+        
         <TooltipProvider>
           <Toaster />
           <Sonner />
           <AdminAuthProvider>
             <BookingProvider>
               <BrowserRouter>
+                {/* Route Transition Loader - Shows during navigation */}
+                <RouteTransitionLoader />
+                
                 <ClientAuthProvider>
                   <Suspense fallback={<AppLoader />}>
                     <Routes>

@@ -179,7 +179,7 @@ export default function ClientDashboard() {
             <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-primary/10 flex items-center justify-center">
               <Sparkles className="w-12 h-12 text-primary" />
             </div>
-            <h2 className="text-2xl font-bold mb-2 text-foreground">ברוכים הבאים לסטודיו אותנטי</h2>
+            <h2 className="text-2xl font-bold mb-2 text-foreground">ברוכים הבאים למכון היופי שלך</h2>
             <p className="text-muted-foreground mb-8 max-w-md mx-auto">
               כאן תוכלו לראות את כל התורים שלכם, תמונות לפני ואחרי, והיסטוריית הטיפולים.
             </p>

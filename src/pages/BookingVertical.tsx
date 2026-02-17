@@ -646,7 +646,7 @@ const BookingVertical = () => {
 
         {/* Footer */}
         <footer className="py-8 border-t border-border text-center space-y-2">
-          <h3 className="text-base font-semibold text-foreground">{settings?.business_name || 'סטודיו אלגנט'}</h3>
+          <h3 className="text-base font-semibold text-foreground">{settings?.business_name || 'מכון היופי שלך'}</h3>
           <div className="flex flex-col items-center gap-1.5 text-muted-foreground text-sm">
             {settings?.business_phone && (
               <a href={`tel:${settings.business_phone}`} className="flex items-center gap-2 hover:text-primary transition-colors">
