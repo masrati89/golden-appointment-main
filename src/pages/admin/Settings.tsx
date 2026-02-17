@@ -8,7 +8,6 @@ import { Loader2, Save, Settings, CreditCard, Calendar, Bell, Upload, X } from '
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { StorageDebug } from '@/components/StorageDebug';
 
 const tabs = [
   { id: 'general', label: 'כללי', icon: Settings },
@@ -93,9 +92,6 @@ export default function AdminSettings() {
   return (
     <div className="space-y-6 max-w-3xl pb-24">
       <h1 className="text-3xl font-bold text-foreground">הגדרות</h1>
-
-      {/* Storage Debug Component - Temporary for debugging */}
-      <StorageDebug />
 
       {/* Tabs — flex-wrap so all fit without horizontal scroll */}
       <div className="glass-card p-1.5 flex flex-wrap gap-1.5">
@@ -334,8 +330,8 @@ function LogoUploadField({ value, onChange }: { value: string; onChange: (v: str
       toast.error('יש להעלות קובץ תמונה בלבד');
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('גודל הקובץ מקסימלי 2MB');
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('גודל הקובץ מקסימלי 10MB');
       return;
     }
     setUploading(true);
@@ -344,9 +340,9 @@ function LogoUploadField({ value, onChange }: { value: string; onChange: (v: str
       const sanitizedName = file.name.replace(/[^a-zA-Z0-9.]/g, '');
       const filePath = `public/${Date.now()}${sanitizedName}`;
       
-      // Upload to 'upload' bucket
+      // Upload to 'images' bucket
       const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('upload')
+        .from('images')
         .upload(filePath, file, { upsert: true });
 
       if (uploadError) {
@@ -361,7 +357,7 @@ function LogoUploadField({ value, onChange }: { value: string; onChange: (v: str
       }
 
       // Get public URL
-      const { data: { publicUrl } } = supabase.storage.from('upload').getPublicUrl(filePath);
+      const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(filePath);
       
       if (!publicUrl) {
         throw new Error('לא ניתן לקבל כתובת URL ציבורית');
@@ -452,8 +448,8 @@ function BackgroundImageUploadField({ value, onChange }: { value: string; onChan
       toast.error('יש להעלות קובץ תמונה בלבד');
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('גודל הקובץ מקסימלי 5MB');
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('גודל הקובץ מקסימלי 10MB');
       return;
     }
     setUploading(true);
@@ -462,9 +458,9 @@ function BackgroundImageUploadField({ value, onChange }: { value: string; onChan
       const sanitizedName = file.name.replace(/[^a-zA-Z0-9.]/g, '');
       const filePath = `public/${Date.now()}${sanitizedName}`;
       
-      // Upload to 'upload' bucket
+      // Upload to 'images' bucket
       const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('upload')
+        .from('images')
         .upload(filePath, file, { upsert: false });
 
       if (uploadError) {
@@ -479,7 +475,7 @@ function BackgroundImageUploadField({ value, onChange }: { value: string; onChan
       }
 
       // Get public URL
-      const { data: { publicUrl } } = supabase.storage.from('upload').getPublicUrl(filePath);
+      const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(filePath);
       
       if (!publicUrl) {
         throw new Error('לא ניתן לקבל כתובת URL ציבורית');

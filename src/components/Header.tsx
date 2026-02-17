@@ -1,10 +1,12 @@
-import { Home, UserCog } from 'lucide-react';
+import { Home, UserCog, User, LogIn } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '@/hooks/useSettings';
+import { useClientAuth } from '@/contexts/ClientAuthContext';
 
 const Header = () => {
   const navigate = useNavigate();
   const { data: settings } = useSettings();
+  const { isAuthenticated, user } = useClientAuth();
   const logoUrl = settings?.business_logo_url;
 
   return (
@@ -30,13 +32,38 @@ const Header = () => {
         )}
       </button>
 
-      <button
-        onClick={() => navigate('/')}
-        className="flex items-center gap-2 min-w-[40px] min-h-[40px] justify-center rounded-lg text-muted-foreground hover:text-primary transition-colors"
-        aria-label="דף הבית"
-      >
-        <Home className="w-5 h-5" />
-      </button>
+      <div className="flex items-center gap-2">
+        {/* Login/Account Button */}
+        {isAuthenticated ? (
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="flex items-center gap-1.5 min-w-[40px] min-h-[40px] justify-center rounded-lg text-primary hover:bg-primary/10 transition-colors px-2"
+            aria-label="החשבון שלי"
+            title={user?.email || 'החשבון שלי'}
+          >
+            <User className="w-4 h-4" />
+            <span className="hidden sm:inline text-xs font-medium">החשבון שלי</span>
+          </button>
+        ) : (
+          <button
+            onClick={() => navigate('/login')}
+            className="flex items-center gap-1.5 min-w-[40px] min-h-[40px] justify-center rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors px-2"
+            aria-label="התחברות"
+          >
+            <LogIn className="w-4 h-4" />
+            <span className="hidden sm:inline text-xs font-medium">התחברות</span>
+          </button>
+        )}
+
+        {/* Home Button */}
+        <button
+          onClick={() => navigate('/')}
+          className="flex items-center gap-2 min-w-[40px] min-h-[40px] justify-center rounded-lg text-muted-foreground hover:text-primary transition-colors"
+          aria-label="דף הבית"
+        >
+          <Home className="w-5 h-5" />
+        </button>
+      </div>
     </header>
   );
 };

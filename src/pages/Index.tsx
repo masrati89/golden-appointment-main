@@ -6,11 +6,37 @@ import BottomNav from '@/components/BottomNav';
 import OnboardingTour from '@/components/OnboardingTour';
 import FloatingWhatsApp from '@/components/FloatingWhatsApp';
 import { useSettings } from '@/hooks/useSettings';
+import { supabase } from '@/integrations/supabase/client';
+import { useState } from 'react';
+import { Loader2 } from 'lucide-react';
 
 const Index = () => {
   const navigate = useNavigate();
   const { data: settings } = useSettings();
   const bgImageUrl = settings?.background_image_url;
+  const [isCheckingAuth, setIsCheckingAuth] = useState(false);
+
+  const handleBookAppointment = async () => {
+    setIsCheckingAuth(true);
+    try {
+      // Check if user is authenticated
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        // Not logged in - redirect to login with next param
+        navigate('/login?next=/booking-menu');
+      } else {
+        // Logged in - proceed to booking
+        navigate('/booking-menu');
+      }
+    } catch (error) {
+      console.error('Auth check error:', error);
+      // On error, still allow navigation but redirect to login
+      navigate('/login?next=/booking-menu');
+    } finally {
+      setIsCheckingAuth(false);
+    }
+  };
 
   const steps = [
     {
@@ -32,7 +58,7 @@ const Index = () => {
 
   return (
     <div
-      className="h-[100dvh] overflow-hidden flex flex-col relative"
+      className="min-h-[100svh] flex flex-col relative overflow-x-hidden"
       dir="rtl"
       style={
         bgImageUrl
@@ -50,112 +76,133 @@ const Index = () => {
 
       <Header />
 
-      {/* Safe area: status bar + header clearance; tighter vertical rhythm on mobile */}
+      {/* Main content area with safe area and smart scrolling */}
       <main
-        className="flex-1 flex flex-col min-h-0 w-full px-4 md:px-8 overflow-y-auto z-10 relative"
-        style={{ paddingTop: 'max(calc(env(safe-area-inset-top, 0px) + 3.5rem), 3.5rem)', paddingBottom: '5.5rem' }}
+        className="flex-1 flex flex-col min-h-0 w-full px-4 sm:px-6 md:px-8 lg:px-12 overflow-y-auto z-10 relative"
+        style={{ 
+          paddingTop: 'max(calc(env(safe-area-inset-top, 0px) + 3.5rem), 3.5rem)', 
+          paddingBottom: 'max(calc(env(safe-area-inset-bottom, 0px) + 6rem), 6rem)' 
+        }}
       >
-        <div className="w-full max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto flex flex-col justify-start gap-y-5 sm:gap-y-6 md:gap-y-8 py-2">
-          {/* Hero */}
-          <motion.section
-            className="text-center space-y-2"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
-          >
-            {settings?.business_logo_url ? (
-              <img src={settings.business_logo_url} alt={settings?.business_name || 'לוגו'} className="h-16 md:h-20 mx-auto object-contain mb-2" />
-            ) : (
-              <h1 className={`text-3xl md:text-4xl lg:text-5xl font-bold ${bgImageUrl ? 'text-white' : 'text-foreground'}`}>
-                {settings?.business_name || 'סטודיו אותנטי'}
-              </h1>
-            )}
-            <p className={`text-sm md:text-base ${bgImageUrl ? 'text-white/80' : 'text-muted-foreground'}`}>
-              חווית הזמנה פרימיום לסלון היופי שלך
-            </p>
-          </motion.section>
-
-          {/* 3 instruction boxes */}
-          <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 lg:gap-5">
-            {steps.map((step, i) => {
-              const Icon = step.icon;
-              return (
-                <motion.div
-                  key={i}
-                  data-tour={`step-${i + 1}`}
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: 0.1 + i * 0.08 }}
-                  className="w-full glass-card px-5 py-4 md:py-6 lg:py-8 text-right md:text-center flex md:flex-col items-center md:items-center gap-4 md:gap-3 min-h-[60px] cursor-default"
-                >
-                  <div className="w-11 h-11 md:w-14 md:h-14 rounded-xl bg-primary/15 flex items-center justify-center flex-shrink-0">
-                    <Icon className="w-5 h-5 md:w-6 md:h-6 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0 md:flex-none">
-                    <div className="flex md:justify-center items-center gap-2">
-                      <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center flex-shrink-0">
-                        {i + 1}
-                      </span>
-                      <h3 className="text-base md:text-lg font-bold text-foreground">{step.title}</h3>
-                    </div>
-                    <p className="text-xs md:text-sm text-muted-foreground mt-0.5">{step.description}</p>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </section>
-
-          {/* CTA — reduced gap from boxes above */}
-          <motion.section
-            className="text-center"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3, delay: 0.5 }}
-          >
-            <button
-              onClick={() => navigate('/booking-menu')}
-              className="h-12 md:h-14 px-8 md:px-12 rounded-xl text-base md:text-lg font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm lg:hover:shadow-lg lg:hover:scale-105 transition-all duration-200 active:scale-[0.97]"
-            >
-              התחילי עכשיו
-            </button>
-          </motion.section>
-
-          {/* Social below CTA with mt-8 */}
-          {(settings?.show_instagram || settings?.show_facebook) && (
+        <div className="w-full max-w-7xl mx-auto flex flex-col min-h-full">
+          {/* Top section: Hero + Instruction boxes */}
+          <div className="flex-shrink-0 pt-4 sm:pt-6 md:pt-8">
+            {/* Hero */}
             <motion.section
-              className="flex items-center justify-center gap-4 mt-8"
+              className="text-center space-y-2 mb-6 sm:mb-8 md:mb-10"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+            >
+              {settings?.business_logo_url ? (
+                <img src={settings.business_logo_url} alt={settings?.business_name || 'לוגו'} className="h-16 md:h-20 lg:h-24 mx-auto object-contain mb-2" />
+              ) : (
+                <h1 className={`text-3xl md:text-4xl lg:text-5xl font-bold ${bgImageUrl ? 'text-white' : 'text-foreground'}`}>
+                  {settings?.business_name || 'סטודיו אותנטי'}
+                </h1>
+              )}
+              <p className={`text-sm md:text-base lg:text-lg ${bgImageUrl ? 'text-white/80' : 'text-muted-foreground'}`}>
+                חווית הזמנה פרימיום לסלון היופי שלך
+              </p>
+            </motion.section>
+
+            {/* 3 instruction boxes - Dynamic scaling with overflow protection */}
+            <section className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 md:gap-6 mb-6 sm:mb-8">
+              {steps.map((step, i) => {
+                const Icon = step.icon;
+                return (
+                  <motion.div
+                    key={i}
+                    data-tour={`step-${i + 1}`}
+                    initial={{ opacity: 0, y: 15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.1 + i * 0.08 }}
+                    className="w-full glass-card px-4 sm:px-5 md:px-6 py-6 sm:py-7 md:py-8 text-right md:text-center flex md:flex-col items-center md:items-center gap-4 md:gap-3 cursor-default overflow-hidden"
+                  >
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-xl bg-primary/15 flex items-center justify-center flex-shrink-0">
+                      <Icon className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0 md:flex-none w-full">
+                      <div className="flex md:justify-center items-center gap-2 mb-1">
+                        <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center flex-shrink-0">
+                          {i + 1}
+                        </span>
+                        <h3 className={`text-lg md:text-xl font-bold text-foreground line-clamp-2 ${bgImageUrl ? 'text-white' : ''}`}>
+                          {step.title}
+                        </h3>
+                      </div>
+                      <p className={`text-sm md:text-base text-muted-foreground line-clamp-2 ${bgImageUrl ? 'text-white/80' : ''}`}>
+                        {step.description}
+                      </p>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </section>
+          </div>
+
+          {/* Central action area - Smart positioning with flex-1 */}
+          <div className="flex-1 flex flex-col justify-center items-center gap-6 min-h-[120px] py-6">
+            {/* CTA Button */}
+            <motion.section
+              className="text-center"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ duration: 0.3, delay: 0.6 }}
+              transition={{ duration: 0.3, delay: 0.5 }}
             >
-              {settings.show_instagram && settings.instagram_url && (
-                <a
-                  href={settings.instagram_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`glass-card p-3 md:p-4 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 ${
-                    bgImageUrl ? 'bg-white/20 backdrop-blur-md hover:bg-white/30' : 'bg-secondary/50 hover:bg-secondary'
-                  }`}
-                  aria-label="עקבו אחרינו באינסטגרם"
-                >
-                  <Instagram className={`w-5 h-5 md:w-6 md:h-6 ${bgImageUrl ? 'text-white' : 'text-foreground'}`} />
-                </a>
-              )}
-              {settings.show_facebook && settings.facebook_url && (
-                <a
-                  href={settings.facebook_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`glass-card p-3 md:p-4 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 ${
-                    bgImageUrl ? 'bg-white/20 backdrop-blur-md hover:bg-white/30' : 'bg-secondary/50 hover:bg-secondary'
-                  }`}
-                  aria-label="עקבו אחרינו בפייסבוק"
-                >
-                  <Facebook className={`w-5 h-5 md:w-6 md:h-6 ${bgImageUrl ? 'text-white' : 'text-foreground'}`} />
-                </a>
-              )}
+              <button
+                onClick={handleBookAppointment}
+                disabled={isCheckingAuth}
+                className="h-12 sm:h-14 md:h-16 px-8 sm:px-10 md:px-12 lg:px-16 rounded-xl text-base sm:text-lg md:text-xl font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-md md:shadow-lg lg:hover:shadow-xl lg:hover:scale-105 transition-all duration-200 active:scale-[0.97] min-w-[200px] sm:min-w-[240px] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 mx-auto"
+              >
+                {isCheckingAuth ? (
+                  <>
+                    <Loader2 className="w-5 h-5 sm:w-6 sm:h-6 animate-spin" />
+                    <span>בודק...</span>
+                  </>
+                ) : (
+                  'התחילי עכשיו'
+                )}
+              </button>
             </motion.section>
-          )}
+
+            {/* Social below CTA with proper spacing */}
+            {(settings?.show_instagram || settings?.show_facebook) && (
+              <motion.section
+                className="flex items-center justify-center gap-4 sm:gap-5"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3, delay: 0.6 }}
+              >
+                {settings.show_instagram && settings.instagram_url && (
+                  <a
+                    href={settings.instagram_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`glass-card p-3 sm:p-4 md:p-5 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 min-w-[48px] min-h-[48px] flex items-center justify-center ${
+                      bgImageUrl ? 'bg-white/20 backdrop-blur-md hover:bg-white/30' : 'bg-secondary/50 hover:bg-secondary'
+                    }`}
+                    aria-label="עקבו אחרינו באינסטגרם"
+                  >
+                    <Instagram className={`w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 ${bgImageUrl ? 'text-white' : 'text-foreground'}`} />
+                  </a>
+                )}
+                {settings.show_facebook && settings.facebook_url && (
+                  <a
+                    href={settings.facebook_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`glass-card p-3 sm:p-4 md:p-5 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 min-w-[48px] min-h-[48px] flex items-center justify-center ${
+                      bgImageUrl ? 'bg-white/20 backdrop-blur-md hover:bg-white/30' : 'bg-secondary/50 hover:bg-secondary'
+                    }`}
+                    aria-label="עקבו אחרינו בפייסבוק"
+                  >
+                    <Facebook className={`w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 ${bgImageUrl ? 'text-white' : 'text-foreground'}`} />
+                  </a>
+                )}
+              </motion.section>
+            )}
+          </div>
         </div>
       </main>
 

@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { supabase } from '@/integrations/supabase/client';
-import { format, addDays } from 'date-fns';
+import { format, addDays, parseISO } from 'date-fns';
 import { toast } from 'sonner';
+import { useClientAuth } from '@/contexts/ClientAuthContext';
+import { saveBookingState, getAndClearBookingState } from '@/lib/bookingState';
+import { Info, Lock } from 'lucide-react';
 import {
   Clock,
   Calendar,
@@ -63,9 +66,11 @@ function StepBadge({ number, title }: { number: number; title: string }) {
 
 const BookingVertical = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const { data: settings } = useSettings();
   const { data: services, isLoading: servicesLoading } = useServices();
+  const { isAuthenticated, isLoading: authLoading } = useClientAuth();
 
   // Selection state
   const [selectedService, setSelectedService] = useState<any>(null);
@@ -127,6 +132,29 @@ const BookingVertical = () => {
   // Form data stored for payment step
   const [formData, setFormData] = useState<BookingFormData | null>(null);
 
+  // Restore booking state after login
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      const savedState = getAndClearBookingState();
+      if (savedState) {
+        // Restore service
+        const service = services?.find((s) => s.id === savedState.serviceId);
+        if (service) {
+          setSelectedService(service);
+          setSelectedDate(parseISO(savedState.selectedDate));
+          setSelectedTime(savedState.selectedTime);
+          setFormData(savedState.formData);
+          if (savedState.selectedPayment) {
+            setSelectedPayment(savedState.selectedPayment as PaymentMethod);
+          }
+          toast.success('פרטי ההזמנה שלך שוחזרו', {
+            description: 'אתה יכול להמשיך עם ההזמנה',
+          });
+        }
+      }
+    }
+  }, [authLoading, isAuthenticated, services]);
+
   // Auto-scroll to payment section after it renders
   useEffect(() => {
     if (formData) {
@@ -141,9 +169,44 @@ const BookingVertical = () => {
     setFormData(data);
   };
 
+  // Check authentication before booking
+  const requireAuth = async (): Promise<boolean> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      // Save booking state before redirecting
+      if (selectedService && selectedDate && selectedTime && formData) {
+        saveBookingState({
+          serviceId: selectedService.id,
+          selectedDate: format(selectedDate, 'yyyy-MM-dd'),
+          selectedTime: selectedTime,
+          formData: {
+            customerName: formData.customerName,
+            customerPhone: formData.customerPhone,
+            customerEmail: formData.customerEmail || '',
+            notes: formData.notes,
+          },
+          selectedPayment: selectedPayment || undefined,
+          returnPath: location.pathname + location.search,
+        });
+      }
+      toast.info('יש להתחבר כדי להשלים את ההזמנה', {
+        description: 'אחרי ההתחברות תועבר חזרה להזמנה',
+      });
+      navigate('/login', { state: { from: location.pathname } });
+      return false;
+    }
+    return true;
+  };
+
   // Booking mutation
   const createBooking = useMutation({
     mutationFn: async (method: PaymentMethod) => {
+      // Check authentication first
+      const isAuthenticated = await requireAuth();
+      if (!isAuthenticated) {
+        throw new Error('נדרשת התחברות');
+      }
+
       if (!formData || !selectedDate || !selectedTime || !selectedService) throw new Error('חסרים פרטים');
       const dateStr = format(selectedDate, 'yyyy-MM-dd');
 
@@ -157,6 +220,10 @@ const BookingVertical = () => {
 
       if (conflict) throw new Error('השעה נתפסה, אנא בחר שעה אחרת');
 
+      // Get current user for client_id
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id || null;
+
       const { data, error } = await supabase
         .from('bookings')
         .insert({
@@ -165,7 +232,8 @@ const BookingVertical = () => {
           booking_time: selectedTime,
           customer_name: formData.customerName,
           customer_phone: formData.customerPhone,
-          customer_email: formData.customerEmail || null,
+          customer_email: formData.customerEmail || session?.user?.email || null,
+          client_id: userId, // Link booking to authenticated user
           notes: formData.notes || null,
           total_price: Number(selectedService.price),
           payment_method: method,
@@ -359,6 +427,27 @@ const BookingVertical = () => {
         {selectedTime && selectedDate && selectedService && (
           <section ref={formRef} className={`animate-slide-up ${stepSectionClass}`}>
             <StepBadge number={4} title="פרטים אישיים" />
+
+            {/* Auth Notice */}
+            {!isAuthenticated && !authLoading && (
+              <div className="max-w-[340px] mx-auto mb-3 sm:mb-4">
+                <div className="glass-card p-3 sm:p-4 border border-primary/30 bg-primary/5 rounded-xl flex items-start gap-3">
+                  <div className="flex-shrink-0 mt-0.5">
+                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                      <Lock className="w-4 h-4 text-primary" />
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-foreground mb-1">
+                      התחברות נדרשת
+                    </p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      כדי לשמור על הפרטיות שלך ולנהל את התורים שלך, יש להתחבר למערכת. ההזמנה תישמר אוטומטית.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Summary Card */}
             <div className="glass-card p-3 sm:p-4 mb-3 sm:mb-4 border border-primary/20 max-w-[340px] mx-auto rounded-2xl shadow-sm">
