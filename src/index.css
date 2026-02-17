@@ -1,0 +1,179 @@
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 30 50% 97%;
+    --foreground: 220 15% 20%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 15% 20%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 15% 20%;
+
+    --primary: 38 45% 62%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 30 30% 95%;
+    --secondary-foreground: 220 15% 20%;
+
+    --muted: 30 20% 94%;
+    --muted-foreground: 220 9% 42%;
+
+    --accent: 38 45% 62%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 30 15% 88%;
+    --input: 30 15% 88%;
+    --ring: 38 45% 62%;
+
+    --radius: 1rem;
+
+    --gold: 38 45% 62%;
+    --gold-light: 38 35% 77%;
+    --gold-dark: 38 50% 48%;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 30 15% 88%;
+    --sidebar-ring: 38 45% 62%;
+
+    /* Glass card tokens */
+    --glass-bg: 0 0% 100% / 0.8;
+    --glass-border: 0 0% 100% / 0.4;
+    --glass-blur: 10px;
+  }
+
+  .dark {
+    --background: 220 20% 7%;
+    --foreground: 210 20% 96%;
+    --card: 220 20% 10%;
+    --card-foreground: 210 20% 96%;
+    --popover: 220 20% 10%;
+    --popover-foreground: 210 20% 96%;
+    --primary: 38 45% 62%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 15% 16%;
+    --secondary-foreground: 210 20% 96%;
+    --muted: 220 15% 16%;
+    --muted-foreground: 220 9% 65%;
+    --accent: 38 45% 62%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 210 20% 96%;
+    --border: 220 15% 16%;
+    --input: 220 15% 16%;
+    --ring: 38 45% 62%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+
+    --glass-bg: 220 20% 10% / 0.8;
+    --glass-border: 220 20% 20% / 0.4;
+    --glass-blur: 10px;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Hide scrollbar for horizontal scroll containers */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Heebo', system-ui, sans-serif;
+    direction: rtl;
+    text-align: right;
+    font-size: 16px;
+    line-height: 1.5;
+    color: hsl(220 15% 20%);
+    overflow: hidden;
+    height: 100dvh;
+    width: 100vw;
+  }
+}
+
+@layer components {
+  /* Glassmorphism card utility */
+  .glass-card {
+    background: hsl(var(--glass-bg));
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid hsl(var(--glass-border));
+    border-radius: 1rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Fallback for browsers without backdrop-filter */
+  @supports not (backdrop-filter: blur(10px)) {
+    .glass-card {
+      background: hsl(0 0% 100% / 0.92);
+    }
+    .dark .glass-card {
+      background: hsl(220 20% 10% / 0.92);
+    }
+  }
+}
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@keyframes wa-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.5); }
+  50% { box-shadow: 0 0 0 12px rgba(37, 211, 102, 0); }
+}
+
+.animate-wa-pulse {
+  animation: wa-pulse 3s ease-in-out infinite;
+}
+
+@keyframes tour-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.6), 0 0 12px 2px hsl(var(--primary) / 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 10px hsl(var(--primary) / 0), 0 0 24px 6px hsl(var(--primary) / 0);
+  }
+}
+
+.animate-tour-pulse {
+  animation: tour-pulse 1.8s ease-in-out infinite;
+}
