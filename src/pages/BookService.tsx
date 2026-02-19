@@ -121,6 +121,26 @@ const BookService = () => {
         .single();
 
       if (error) throw error;
+
+      // Create Google Calendar event (non-blocking)
+      if (settings?.google_calendar_connected) {
+        supabase.functions.invoke('create-google-calendar-event', {
+          body: {
+            booking_id: data.id,
+            customer_name: formData.customerName,
+            customer_phone: formData.customerPhone,
+            customer_email: formData.customerEmail || null,
+            booking_date: dateStr,
+            booking_time: selectedTime!,
+            service_name: service!.name,
+            service_duration_min: service!.duration_min,
+            notes: formData.notes || null,
+          },
+        }).catch((err) => {
+          console.error('Failed to create Google Calendar event:', err);
+        });
+      }
+
       return data;
     },
     onSuccess: (_data, variables) => {
@@ -211,6 +231,7 @@ const BookService = () => {
                 src={service.image_url}
                 alt={service.name}
                 className="w-20 h-20 rounded-xl object-cover flex-shrink-0"
+                loading="lazy"
               />
             )}
           </div>

@@ -127,13 +127,18 @@ export async function getAvailableSlots(
   serviceId: string,
   supabase: SupabaseClient,
 ): Promise<TimeSlot[]> {
-  // 1. Fetch settings
+  // 1. Fetch settings from business_settings (single source of truth)
   const { data: settings } = await supabase
-    .from('settings')
+    .from('business_settings')
     .select('working_hours_start, working_hours_end, slot_duration_min, working_days, min_advance_hours')
-    .single();
+    .limit(1)
+    .maybeSingle();
 
-  if (!settings) return [];
+  if (!settings) {
+    console.warn('No business_settings found - using defaults');
+    // Return empty array if no settings found
+    return [];
+  }
   const s = settings as SettingsForSlots;
 
   // 2. Working day check
@@ -162,13 +167,33 @@ export async function getAvailableSlots(
   // 5. Filter by closing time
   slots = filterSlotsWithinWorkingHours(slots, duration, endTime);
 
-  // 6. Fetch existing bookings
+  // 6. Fetch existing bookings with service duration
   const dateStr = format(date, 'yyyy-MM-dd');
-  const { data: bookings } = await supabase
+  const { data: bookingsData } = await supabase
     .from('bookings')
-    .select('id, booking_date, booking_time, status, services:service_id(duration_min)')
+    .select('id, booking_date, booking_time, status, service_id')
     .eq('booking_date', dateStr)
     .in('status', ['confirmed', 'pending']);
+
+  // Fetch service durations for all bookings
+  const serviceIds = [...new Set((bookingsData ?? []).map((b: any) => b.service_id).filter(Boolean))];
+  const { data: servicesData } = serviceIds.length > 0
+    ? await supabase
+        .from('services')
+        .select('id, duration_min')
+        .in('id', serviceIds)
+    : { data: [] };
+
+  const serviceDurationMap = new Map((servicesData ?? []).map((s: any) => [s.id, s.duration_min]));
+  
+  // Map bookings with service duration
+  const bookings = (bookingsData ?? []).map((b: any) => ({
+    id: b.id,
+    booking_date: b.booking_date,
+    booking_time: b.booking_time,
+    status: b.status,
+    services: b.service_id ? { duration_min: serviceDurationMap.get(b.service_id) ?? 30 } : null,
+  }));
 
   // 7. Check conflicts
   slots = checkSlotAvailability(slots, (bookings ?? []) as unknown as BookingWithService[], duration);

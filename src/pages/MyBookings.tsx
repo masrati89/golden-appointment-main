@@ -42,7 +42,8 @@ const MyBookings = () => {
       .from('bookings')
       .select('id, booking_date, booking_time, status, total_price, customer_name, services:service_id(name)')
       .eq('customer_phone', cleanPhone)
-      .order('booking_date', { ascending: false });
+      .order('booking_date', { ascending: false })
+      .limit(100);
 
     if (!error && data) {
       setBookings(data as BookingWithService[]);

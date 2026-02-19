@@ -5,21 +5,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useSettings } from '@/hooks/useSettings';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import { toast } from 'sonner';
-import { Loader2, Save, Settings, CreditCard, Calendar, Bell, Upload, X, CheckCircle2 } from 'lucide-react';
+import { Loader2, Save, Settings, CreditCard, Calendar, Bell, Upload, X } from 'lucide-react';
+import { GoogleSyncStatus } from '@/components/GoogleSyncStatus';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-
-function GoogleIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-    </svg>
-  );
-}
+import { Textarea } from '@/components/ui/textarea';
 
 const tabs = [
   { id: 'general', label: 'כללי', icon: Settings },
@@ -43,22 +34,33 @@ export default function AdminSettings() {
         show_facebook: settings.show_facebook ?? false,
         instagram_url: settings.instagram_url ?? '',
         facebook_url: settings.facebook_url ?? '',
-        google_calendar_connected: settings.google_calendar_connected ?? false,
       });
     }
   }, [settings]);
 
   // Handle OAuth callback query params - sync first (toast, cleanup URL), then refetch
-  // Avoids dangling promises that can cause "async response" errors on redirect/navigation
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const connected = params.get('connected');
-    if (connected !== '1' && connected !== '0') return;
-
+    const success = params.get('success');
     const err = params.get('error');
     const mounted = { current: true };
 
-    // Sync: show toast and clean URL immediately (before any async work)
+    if (success === 'true') {
+      toast.success('Google Calendar connected successfully!');
+      window.history.replaceState({}, '', window.location.pathname);
+      (async () => {
+        try {
+          await queryClient.invalidateQueries({ queryKey: ['settings'] });
+        } catch (e) {
+          if (mounted.current) console.warn('OAuth callback: settings refetch failed', e);
+        }
+      })();
+      return () => { mounted.current = false; };
+    }
+
+    if (connected !== '1' && connected !== '0') return;
+
     if (connected === '1') {
       toast.success('יומן Google חובר בהצלחה');
     } else {
@@ -66,21 +68,18 @@ export default function AdminSettings() {
     }
     window.history.replaceState({}, '', window.location.pathname);
 
-    // Async: refetch settings (fire-and-forget, wrapped to avoid leaks)
     (async () => {
       try {
         await queryClient.invalidateQueries({ queryKey: ['settings'] });
       } catch (e) {
-        if (mounted.current) {
-          console.warn('OAuth callback: settings refetch failed', e);
-        }
+        if (mounted.current) console.warn('OAuth callback: settings refetch failed', e);
       }
     })();
 
     return () => { mounted.current = false; };
   }, [queryClient]);
 
-  // Build payload for update_settings RPC (bypasses PostgREST schema cache)
+  // business_settings columns (single source of truth; no settings table)
   const SETTINGS_COLUMNS = [
     'id', 'admin_phone', 'admin_calendar_email', 'background_image_url', 'bank_account', 'bank_branch', 'bank_name',
     'bit_business_name', 'bit_payment_url', 'bit_phone_number', 'business_address',
@@ -92,14 +91,16 @@ export default function AdminSettings() {
     'stripe_secret_key', 'whatsapp_api_token', 'whatsapp_float_number', 'working_days',
     'working_hours_end', 'working_hours_start',
     'instagram_url', 'facebook_url', 'show_instagram', 'show_facebook',
+    'whatsapp_enabled', 'whatsapp_api_url', 'whatsapp_admin_phone', 'whatsapp_new_booking_template',
+    'client_whatsapp_enabled', 'whatsapp_client_confirmation_template',
   ];
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const { id } = form;
-      if (!id) throw new Error('Missing settings id');
+      if (!id) throw new Error('Missing business_settings id');
 
-      const payload: Record<string, any> = { id };
+      const payload: Record<string, any> = {};
       SETTINGS_COLUMNS.forEach((key) => {
         if (key === 'id') return;
         if (!(key in form)) return;
@@ -113,7 +114,10 @@ export default function AdminSettings() {
         }
       });
 
-      const { error } = await supabase.rpc('update_settings', { data: payload });
+      const { error } = await supabase
+        .from('business_settings')
+        .update(payload)
+        .eq('id', id);
       if (error) {
         console.error('Settings save error:', error);
         throw error;
@@ -290,76 +294,127 @@ export default function AdminSettings() {
           <Section title="התראות">
             <ToggleRow label="שלח אישור SMS" checked={form.send_confirmation_sms} onChange={(v) => update('send_confirmation_sms', v)} />
             <Field label="שעות תזכורת לפני תור" value={form.send_reminder_hours} onChange={(v) => update('send_reminder_hours', Number(v))} type="number" />
-            <Field label="WhatsApp API Token" value={form.whatsapp_api_token} onChange={(v) => update('whatsapp_api_token', v)} dir="ltr" />
-            <Field label="Google Calendar ID" value={form.google_calendar_id} onChange={(v) => update('google_calendar_id', v)} dir="ltr" />
-            <Field label="אימייל ללוח שנה (Google Calendar Sync)" value={form.admin_calendar_email} onChange={(v) => update('admin_calendar_email', v)} dir="ltr" type="email" placeholder="admin@example.com" />
-            <p className="text-xs text-muted-foreground">אימייל זה ישמש ליצירת אירועים אוטומטיים בלוח השנה של Google עבור כל הזמנה חדשה</p>
 
             <div className="pt-2 border-t border-border/60">
-              <Label className="text-sm font-semibold mb-2 block">חיבור יומן Google</Label>
-              {form.google_calendar_connected ? (
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="inline-flex items-center gap-2 text-green-600 dark:text-green-400 font-medium">
-                    <CheckCircle2 className="w-5 h-5 shrink-0" />
-                    מחובר ליומן גוגל
-                  </span>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const { error } = await supabase
-                        .from('business_settings')
-                        .update({ google_calendar_refresh_token: null, google_calendar_connected: false })
-                        .eq('id', user?.id ?? '');
-                      if (error) {
-                        toast.error('שגיאה בהתנתקות');
-                        return;
-                      }
-                      queryClient.invalidateQueries({ queryKey: ['settings'] });
-                      setForm((f) => ({ ...f, google_calendar_connected: false }));
-                      toast.success('יומן Google התנתק');
-                    }}
-                    className="text-sm text-destructive hover:underline"
-                  >
-                    התנתק
-                  </button>
+              <Label className="text-sm font-semibold mb-2 block">Google Calendar</Label>
+              <GoogleSyncStatus
+                isConnected={!!settings?.google_calendar_connected}
+                user={user ?? null}
+                isLoading={isLoading && !settings}
+                onDisconnected={() => setForm((f) => ({ ...f, google_calendar_connected: false }))}
+                invalidateSettings={() => queryClient.invalidateQueries({ queryKey: ['settings'] })}
+              />
+            </div>
+
+            <div className="pt-4 border-t border-border/60">
+              <Label className="text-sm font-semibold mb-3 block">חיבור לוואטסאפ</Label>
+              
+              {/* Master Toggle */}
+              <ToggleRow 
+                label="הפעל התראות WhatsApp אוטומטיות" 
+                checked={form.whatsapp_enabled ?? false} 
+                onChange={(v) => update('whatsapp_enabled', v)} 
+              />
+
+              {/* API Credentials - only show if enabled */}
+              {form.whatsapp_enabled && (
+                <div className="space-y-4 mt-4">
+                  <Field 
+                    label="WhatsApp API URL" 
+                    value={form.whatsapp_api_url ?? ''} 
+                    onChange={(v) => update('whatsapp_api_url', v)} 
+                    dir="ltr" 
+                    placeholder="https://api.example.com/whatsapp/send"
+                  />
+                  <p className="text-xs text-muted-foreground -mt-3">
+                    כתובת ה-API של ספק ה-WhatsApp שלך (לדוגמה: Green API, Twilio, וכו')
+                  </p>
+
+                  <Field 
+                    label="WhatsApp API Token" 
+                    value={form.whatsapp_api_token ?? ''} 
+                    onChange={(v) => update('whatsapp_api_token', v)} 
+                    dir="ltr" 
+                    type="password"
+                    placeholder="הזן את ה-token שלך"
+                  />
+                  <p className="text-xs text-muted-foreground -mt-3">
+                    המפתח הסודי מ-WhatsApp API שלך. שמור בסוד!
+                  </p>
+
+                  <Field 
+                    label="טלפון מנהל (להתראות)" 
+                    value={form.whatsapp_admin_phone ?? ''} 
+                    onChange={(v) => update('whatsapp_admin_phone', v)} 
+                    dir="ltr" 
+                    placeholder="0501234567"
+                  />
+                  <p className="text-xs text-muted-foreground -mt-3">
+                    מספר הטלפון שיקבל התראות על תורים חדשים
+                  </p>
+
+                  {/* Template Editor */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">תבנית הודעת התראה</Label>
+                    <Textarea
+                      value={form.whatsapp_new_booking_template ?? ''}
+                      onChange={(e) => update('whatsapp_new_booking_template', e.target.value)}
+                      className="min-h-[120px] rounded-xl font-mono text-sm"
+                      dir="rtl"
+                      placeholder="💖 תור חדש נקבע במכון היופי!&#10;👤 לקוחה: {{name}}&#10;📱 טלפון: {{phone}}&#10;💅 טיפול: {{service}}&#10;📅 תאריך ושעה: {{date}}"
+                    />
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <p className="font-semibold">משתנים זמינים:</p>
+                      <div className="flex flex-wrap gap-2">
+                        <code className="bg-secondary px-2 py-1 rounded">{"{{name}}"}</code>
+                        <code className="bg-secondary px-2 py-1 rounded">{"{{phone}}"}</code>
+                        <code className="bg-secondary px-2 py-1 rounded">{"{{service}}"}</code>
+                        <code className="bg-secondary px-2 py-1 rounded">{"{{date}}"}</code>
+                        <code className="bg-secondary px-2 py-1 rounded">{"{{time}}"}</code>
+                        <code className="bg-secondary px-2 py-1 rounded">{"{{price}}"}</code>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              ) : !user ? (
-                <div className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-input bg-muted/50 text-muted-foreground">
-                  טוען נתונים...
-                </div>
-              ) : isLoading && !settings ? (
-                <div className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-input bg-muted/50 text-muted-foreground">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  טוען נתונים...
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-                    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-                    if (!clientId || !supabaseUrl) {
-                      toast.error('חסר הגדרת Google Client ID או Supabase URL');
-                      return;
-                    }
-                    const businessId = user.id;
-                    if (!businessId) {
-                      toast.error('נתוני משתמש לא נטענו');
-                      return;
-                    }
-                    const callbackUrl = `${supabaseUrl}/functions/v1/google-auth-callback`;
-                    const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar');
-                    const statePayload = { origin: window.location.origin, business_id: businessId };
-                    const state = btoa(JSON.stringify(statePayload));
-                    const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(callbackUrl)}&response_type=code&scope=${scope}&access_type=offline&prompt=consent&state=${encodeURIComponent(state)}`;
-                    window.location.href = url;
-                  }}
-                  className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-input bg-background hover:bg-muted/50 text-foreground font-medium transition-colors"
-                >
-                  <GoogleIcon className="w-5 h-5" />
-                  חברי יומן גוגל
-                </button>
               )}
+
+              {/* Client Notifications Sub-section */}
+              <div className="pt-4 border-t border-border/60">
+                <Label className="text-sm font-semibold mb-3 block">התראות ללקוחות</Label>
+                
+                {/* Client Toggle */}
+                <ToggleRow 
+                  label="שלח אישור WhatsApp אוטומטי ללקוחות" 
+                  checked={form.client_whatsapp_enabled ?? false} 
+                  onChange={(v) => update('client_whatsapp_enabled', v)} 
+                />
+
+                {/* Client Template Editor - only show if enabled */}
+                {form.client_whatsapp_enabled && (
+                  <div className="space-y-2 mt-4">
+                    <Label className="text-sm font-semibold">תבנית אישור ללקוח</Label>
+                    <Textarea
+                      value={form.whatsapp_client_confirmation_template ?? ''}
+                      onChange={(e) => update('whatsapp_client_confirmation_template', e.target.value)}
+                      className="min-h-[120px] rounded-xl font-mono text-sm"
+                      dir="rtl"
+                      placeholder="היי {{name}} שריינו לך את התור! 🌸&#10;סוג טיפול: {{service}}&#10;מתי? {{date}}&#10;מחכות לראותך!"
+                    />
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <p className="font-semibold">משתנים זמינים:</p>
+                      <div className="flex flex-wrap gap-2">
+                        <code className="bg-secondary px-2 py-1 rounded">{"{{name}}"}</code>
+                        <code className="bg-secondary px-2 py-1 rounded">{"{{service}}"}</code>
+                        <code className="bg-secondary px-2 py-1 rounded">{"{{date}}"}</code>
+                        <code className="bg-secondary px-2 py-1 rounded">{"{{time}}"}</code>
+                      </div>
+                      <p className="text-muted-foreground/80 mt-2">
+                        ההודעה תישלח אוטומטית למספר הטלפון שהלקוח הזין בהזמנה
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </Section>
         )}
@@ -483,9 +538,10 @@ function LogoUploadField({ value, onChange }: { value: string; onChange: (v: str
       
       // Immediately update database
       if (settings?.id) {
-        const { error: updateError } = await supabase.rpc('update_settings', {
-          data: { id: settings.id, business_logo_url: publicUrl },
-        });
+        const { error: updateError } = await supabase
+          .from('business_settings')
+          .update({ business_logo_url: publicUrl })
+          .eq('id', settings.id);
         if (updateError) {
           console.error('Database update error:', {
             message: updateError.message,
@@ -518,7 +574,7 @@ function LogoUploadField({ value, onChange }: { value: string; onChange: (v: str
       <Label className="text-sm font-semibold mb-1.5 block">לוגו העסק</Label>
       {value && (
         <div className="relative w-20 h-20 rounded-xl border border-border overflow-hidden bg-secondary">
-          <img src={value} alt="לוגו" className="w-full h-full object-contain" />
+          <img src={value} alt="לוגו" className="w-full h-full object-contain" loading="lazy" />
           <button
             type="button"
             onClick={() => onChange('')}
@@ -601,9 +657,10 @@ function BackgroundImageUploadField({ value, onChange }: { value: string; onChan
       
       // Immediately update database
       if (settings?.id) {
-        const { error: updateError } = await supabase.rpc('update_settings', {
-          data: { id: settings.id, background_image_url: publicUrl },
-        });
+        const { error: updateError } = await supabase
+          .from('business_settings')
+          .update({ background_image_url: publicUrl })
+          .eq('id', settings.id);
         if (updateError) {
           console.error('Database update error:', {
             message: updateError.message,
@@ -636,7 +693,7 @@ function BackgroundImageUploadField({ value, onChange }: { value: string; onChan
       <Label className="text-sm font-semibold mb-1.5 block">תמונת רקע</Label>
       {value && (
         <div className="relative w-full max-w-sm rounded-xl border border-border overflow-hidden bg-secondary aspect-video">
-          <img src={value} alt="תמונת רקע" className="w-full h-full object-cover" />
+          <img src={value} alt="תמונת רקע" className="w-full h-full object-cover" loading="lazy" />
           <button
             type="button"
             onClick={() => onChange('')}

@@ -34,7 +34,6 @@ import { getAvailableSlots } from '@/lib/slotAvailability';
 import { formatHebrewDate } from '@/lib/dateHelpers';
 import { scrollToStep } from '@/lib/scrollToStep';
 import { bookingFormSchema, type BookingFormData } from '@/lib/validations';
-import { sendWhatsAppViaEdge } from '@/lib/whatsapp';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -79,6 +78,7 @@ const BookingVertical = () => {
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
   const [createdBookingId, setCreatedBookingId] = useState<string | null>(null);
+  const [stripeSuccessLoading, setStripeSuccessLoading] = useState(false);
 
   // Refs for auto-scroll
   const calendarRef = useRef<HTMLDivElement>(null);
@@ -246,15 +246,51 @@ const BookingVertical = () => {
 
       if (error) throw error;
 
-      // For Stripe, don't send WhatsApp yet - wait for payment confirmation
-      if (method !== 'stripe') {
-        sendWhatsAppViaEdge(
-          data,
-          { name: selectedService.name, duration_min: selectedService.duration_min },
-          { business_name: settings?.business_name, business_phone: settings?.business_phone, business_address: settings?.business_address, admin_phone: settings?.admin_phone }
-        ).catch(() => {});
+      // Create Google Calendar event (non-blocking)
+      if (settings?.google_calendar_connected) {
+        supabase.functions.invoke('create-google-calendar-event', {
+          body: {
+            booking_id: data.id,
+            customer_name: formData.customerName,
+            customer_phone: formData.customerPhone,
+            customer_email: formData.customerEmail || session?.user?.email || null,
+            booking_date: dateStr,
+            booking_time: selectedTime,
+            service_name: selectedService.name,
+            service_duration_min: selectedService.duration_min,
+            notes: formData.notes || null,
+          },
+        }).catch((err) => {
+          console.error('Failed to create Google Calendar event:', err);
+        });
       }
 
+      // CRITICAL: Await WhatsApp so loading stays and redirect runs only after Edge Function finishes (avoids EarlyDrop).
+      if (method !== 'stripe') {
+        try {
+          await supabase.functions.invoke('send-whatsapp', {
+            body: {
+              booking: {
+                id: data.id,
+                customer_name: formData.customerName,
+                customer_phone: formData.customerPhone,
+                booking_date: dateStr,
+                booking_time: selectedTime,
+                total_price: Number(selectedService.price),
+                notes: formData.notes || null,
+              },
+              service: {
+                name: selectedService.name,
+                duration_min: selectedService.duration_min,
+              },
+            },
+          });
+        } catch (err) {
+          console.warn('WhatsApp notification skipped/failed:', err);
+        }
+      }
+
+      // Return only after await above — keeps createBooking.isPending true until then; onSuccess/navigate run after this.
       return data;
     },
     onSuccess: (data, method) => {
@@ -287,24 +323,40 @@ const BookingVertical = () => {
     },
   });
 
-  // Handle Stripe payment success
+  // Handle Stripe payment success — keep loading until WhatsApp invoke finishes to avoid EarlyDrop
   const handleStripeSuccess = async () => {
     if (!createdBookingId) return;
-    
-    // Send WhatsApp notifications
-    const booking = await supabase.from('bookings').select('*').eq('id', createdBookingId).single();
-    if (booking.data && selectedService) {
-      sendWhatsAppViaEdge(
-        booking.data,
-        { name: selectedService.name, duration_min: selectedService.duration_min },
-        { business_name: settings?.business_name, business_phone: settings?.business_phone, business_address: settings?.business_address, admin_phone: settings?.admin_phone }
-      ).catch(() => {});
-    }
+    setStripeSuccessLoading(true);
+    try {
+      const booking = await supabase.from('bookings').select('*').eq('id', createdBookingId).single();
+      if (booking.data && selectedService) {
+        try {
+          await supabase.functions.invoke('send-whatsapp', {
+            body: {
+              booking: {
+                id: booking.data.id,
+                customer_name: booking.data.customer_name,
+                customer_phone: booking.data.customer_phone,
+                booking_date: booking.data.booking_date,
+                booking_time: booking.data.booking_time,
+                total_price: booking.data.total_price,
+                notes: booking.data.notes || null,
+              },
+              service: {
+                name: selectedService.name,
+                duration_min: selectedService.duration_min,
+              },
+            },
+          });
+        } catch (err) {
+          console.warn('WhatsApp notification skipped/failed:', err);
+        }
+      }
 
-    queryClient.invalidateQueries({ queryKey: ['slots'] });
-    queryClient.invalidateQueries({ queryKey: ['fully-booked-dates'] });
-    
-    navigate('/booking-success', {
+      queryClient.invalidateQueries({ queryKey: ['slots'] });
+      queryClient.invalidateQueries({ queryKey: ['fully-booked-dates'] });
+
+      navigate('/booking-success', {
       state: {
         serviceName: selectedService!.name,
         serviceDuration: selectedService!.duration_min,
@@ -318,6 +370,9 @@ const BookingVertical = () => {
       },
       replace: true,
     });
+    } finally {
+      setStripeSuccessLoading(false);
+    }
   };
 
   const resetAll = () => {
@@ -605,7 +660,13 @@ const BookingVertical = () => {
                 
                 {/* Stripe Payment Form */}
                 {selectedPayment === 'stripe' && createdBookingId && settings.stripe_publishable_key ? (
-                  <div className="glass-card p-4 rounded-2xl">
+                  <div className="glass-card p-4 rounded-2xl relative">
+                    {stripeSuccessLoading && (
+                      <div className="absolute inset-0 bg-background/80 rounded-2xl flex flex-col items-center justify-center gap-2 z-10">
+                        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                        <span className="text-sm font-medium text-foreground">מעדכן ומעביר...</span>
+                      </div>
+                    )}
                     <StripePayment
                       bookingId={createdBookingId}
                       amount={Number(selectedService.price)}

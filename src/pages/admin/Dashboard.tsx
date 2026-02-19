@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { format, startOfMonth } from 'date-fns';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { Calendar, DollarSign, Users, Clock, TrendingUp } from 'lucide-react';
 import { formatHebrewDate } from '@/lib/dateHelpers';
 
@@ -36,12 +36,14 @@ export default function AdminDashboard() {
         .select('*, services:service_id(name)')
         .eq('booking_date', today)
         .in('status', ['confirmed', 'pending'])
-        .order('booking_time');
+        .order('booking_time')
+        .limit(100);
       return data ?? [];
     },
     refetchInterval: 60000,
   });
 
+  const monthEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd');
   const { data: monthStats } = useQuery({
     queryKey: ['admin-month-stats'],
     queryFn: async () => {
@@ -49,7 +51,9 @@ export default function AdminDashboard() {
         .from('bookings')
         .select('total_price, customer_phone')
         .gte('booking_date', monthStart)
-        .in('status', ['confirmed', 'pending', 'completed']);
+        .lte('booking_date', monthEnd)
+        .in('status', ['confirmed', 'pending', 'completed'])
+        .limit(2000);
 
       const revenue = data?.reduce((sum, b) => sum + Number(b.total_price || 0), 0) ?? 0;
       const uniqueCustomers = new Set(data?.map((b) => b.customer_phone)).size;

@@ -30,7 +30,7 @@ const Header = () => {
             className="flex items-center justify-center"
           >
             {logoUrl ? (
-              <img src={logoUrl} alt={settings?.business_name || 'לוגו'} className="h-8 max-w-[140px] md:max-w-[180px] object-contain" />
+              <img src={logoUrl} alt={settings?.business_name || 'לוגו'} className="h-8 max-w-[140px] md:max-w-[180px] object-contain" loading="lazy" />
             ) : (
               <span className="text-lg font-bold text-foreground tracking-tight max-w-md md:max-w-lg text-center">
                 {settings?.business_name || 'מכון היופי שלך'}

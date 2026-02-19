@@ -39,7 +39,8 @@ export default function ClientDashboard() {
         .from('bookings')
         .select('id, booking_date, booking_time, status, total_price, customer_name, customer_email, services:service_id(name)')
         .eq('customer_email', user.email)
-        .order('booking_date', { ascending: false });
+        .order('booking_date', { ascending: false })
+        .limit(100);
 
       if (error) {
         console.error('Error fetching bookings:', error);

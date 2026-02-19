@@ -4,6 +4,8 @@ import { supabase } from '@/integrations/supabase/client';
 export const useServices = () => {
   return useQuery({
     queryKey: ['services'],
+    staleTime: 5 * 60 * 1000, // 5 minutes - cache across admin pages
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('services')

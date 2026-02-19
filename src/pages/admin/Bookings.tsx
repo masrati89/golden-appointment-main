@@ -1,11 +1,22 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { format, startOfMonth, startOfWeek } from 'date-fns';
-import { Search } from 'lucide-react';
+import { format, startOfMonth, startOfWeek, endOfMonth, endOfWeek } from 'date-fns';
+import { Search, Loader2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatHebrewDate } from '@/lib/dateHelpers';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const statusLabels: Record<string, string> = {
   pending: 'ממתין',
@@ -36,6 +47,7 @@ export default function BookingsManagement() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [deleteDialogBookingId, setDeleteDialogBookingId] = useState<string | null>(null);
 
   const { data: bookings, isLoading } = useQuery({
     queryKey: ['admin-bookings', statusFilter, dateFilter],
@@ -51,8 +63,15 @@ export default function BookingsManagement() {
 
       const today = format(new Date(), 'yyyy-MM-dd');
       if (dateFilter === 'today') query = query.eq('booking_date', today);
-      else if (dateFilter === 'week') query = query.gte('booking_date', format(startOfWeek(new Date()), 'yyyy-MM-dd'));
-      else if (dateFilter === 'month') query = query.gte('booking_date', format(startOfMonth(new Date()), 'yyyy-MM-dd'));
+      else if (dateFilter === 'week') {
+        query = query
+          .gte('booking_date', format(startOfWeek(new Date()), 'yyyy-MM-dd'))
+          .lte('booking_date', format(endOfWeek(new Date()), 'yyyy-MM-dd'));
+      } else if (dateFilter === 'month') {
+        query = query
+          .gte('booking_date', format(startOfMonth(new Date()), 'yyyy-MM-dd'))
+          .lte('booking_date', format(endOfMonth(new Date()), 'yyyy-MM-dd'));
+      }
 
       const { data } = await query;
       return data ?? [];
@@ -73,6 +92,33 @@ export default function BookingsManagement() {
       toast.success('הסטטוס עודכן');
     },
   });
+
+  const deleteBooking = useMutation({
+    mutationFn: async (booking_id: string) => {
+      const { data, error } = await supabase.functions.invoke('delete-booking-with-calendar', {
+        body: { booking_id },
+      });
+      if (error) throw error;
+      if (!data?.success) {
+        throw new Error(data?.error || 'Failed to delete booking');
+      }
+      return booking_id;
+    },
+    onSuccess: (booking_id) => {
+      queryClient.setQueryData(['admin-bookings', statusFilter, dateFilter], (old: any[] | undefined) =>
+        old ? old.filter((b) => b.id !== booking_id) : []
+      );
+      setDeleteDialogBookingId(null);
+      toast.success('Booking and Google Calendar event deleted.');
+    },
+    onError: (error: any) => {
+      toast.error(error?.message || 'Failed to delete appointment.');
+    },
+  });
+
+  const handleDeleteBooking = async (booking_id: string) => {
+    await deleteBooking.mutateAsync(booking_id);
+  };
 
   const filtered = searchQuery
     ? bookings?.filter(
@@ -164,17 +210,34 @@ export default function BookingsManagement() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <select
-                        value={b.status || 'pending'}
-                        onChange={(e) => updateStatus.mutate({ id: b.id, status: e.target.value })}
-                        className="text-xs px-2 py-1 rounded-lg border border-input bg-background min-h-[36px]"
-                      >
-                        <option value="pending">ממתין</option>
-                        <option value="confirmed">אושר</option>
-                        <option value="completed">הושלם</option>
-                        <option value="cancelled">בוטל</option>
-                        <option value="no_show">לא הגיע</option>
-                      </select>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <select
+                          value={b.status || 'pending'}
+                          onChange={(e) => updateStatus.mutate({ id: b.id, status: e.target.value })}
+                          className="text-xs px-2 py-1 rounded-lg border border-input bg-background min-h-[36px]"
+                        >
+                          <option value="pending">ממתין</option>
+                          <option value="confirmed">אושר</option>
+                          <option value="completed">הושלם</option>
+                          <option value="cancelled">בוטל</option>
+                          <option value="no_show">לא הגיע</option>
+                        </select>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => setDeleteDialogBookingId(b.id)}
+                          disabled={deleteBooking.isPending}
+                          aria-label="Delete appointment"
+                        >
+                          {deleteBooking.isPending && deleteDialogBookingId === b.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -183,6 +246,37 @@ export default function BookingsManagement() {
           </table>
         </div>
       </div>
+
+      <AlertDialog open={!!deleteDialogBookingId} onOpenChange={(open) => !open && setDeleteDialogBookingId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete appointment</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this appointment? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteBooking.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                if (deleteDialogBookingId) handleDeleteBooking(deleteDialogBookingId);
+              }}
+              disabled={deleteBooking.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteBooking.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin ml-2" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

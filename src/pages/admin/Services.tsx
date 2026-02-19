@@ -103,7 +103,7 @@ export default function ServicesManagement() {
           <div key={service.id} className="glass-card p-5 flex items-center justify-between gap-4 min-h-[72px]">
             <div className="flex items-center gap-4">
               {service.image_url ? (
-                <img src={service.image_url} alt={service.name} className="w-14 h-14 rounded-lg object-cover" />
+                <img src={service.image_url} alt={service.name} className="w-14 h-14 rounded-lg object-cover" loading="lazy" />
               ) : (
                 <div className="w-14 h-14 rounded-lg bg-primary/10 flex items-center justify-center">
                   <Sparkles className="w-7 h-7 text-primary" />

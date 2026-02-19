@@ -11,6 +11,8 @@ import { supabase } from '@/integrations/supabase/client';
 export const useSettings = (userId?: string | null) => {
   return useQuery({
     queryKey: ['settings', userId ?? 'anonymous'],
+    staleTime: 5 * 60 * 1000, // 5 minutes - avoid refetch when navigating Settings/Calendar/Bookings
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       try {
         if (userId) {

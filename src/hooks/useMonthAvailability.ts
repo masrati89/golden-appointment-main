@@ -24,7 +24,8 @@ export function useMonthAvailability(currentMonth: Date) {
         .select('booking_date')
         .gte('booking_date', startStr)
         .lte('booking_date', endStr)
-        .in('status', ['confirmed', 'pending']);
+        .in('status', ['confirmed', 'pending'])
+        .limit(500);
 
       if (error) throw error;
 

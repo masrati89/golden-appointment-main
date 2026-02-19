@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { format, subDays, startOfWeek, startOfMonth, startOfYear, eachDayOfInterval } from 'date-fns';
+import { format, subDays, startOfWeek, startOfMonth, startOfYear, endOfWeek, endOfMonth, endOfYear, eachDayOfInterval } from 'date-fns';
 import { Calendar, DollarSign, TrendingUp } from 'lucide-react';
 
 type Period = 'week' | 'month' | 'year';
@@ -19,11 +19,18 @@ export default function AdminAnalytics() {
           ? format(startOfMonth(new Date()), 'yyyy-MM-dd')
           : format(startOfYear(new Date()), 'yyyy-MM-dd');
 
+      const endDate = period === 'week'
+        ? format(endOfWeek(new Date()), 'yyyy-MM-dd')
+        : period === 'month'
+          ? format(endOfMonth(new Date()), 'yyyy-MM-dd')
+          : format(endOfYear(new Date()), 'yyyy-MM-dd');
       const { data: bookings } = await supabase
         .from('bookings')
         .select('booking_date, total_price, status, payment_method, services:service_id(name)')
         .gte('booking_date', startDate)
-        .order('booking_date');
+        .lte('booking_date', endDate)
+        .order('booking_date')
+        .limit(2000);
 
       if (!bookings) return null;
 

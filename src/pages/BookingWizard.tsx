@@ -47,7 +47,6 @@ import { getAvailableSlots, type TimeSlot } from '@/lib/slotAvailability';
 import { hebrewDays, hebrewMonths, formatHebrewDate, getHebrewDayName } from '@/lib/dateHelpers';
 import { bookingFormSchema, type BookingFormData } from '@/lib/validations';
 import { downloadICSFile } from '@/lib/calendar';
-import { sendWhatsAppViaEdge } from '@/lib/whatsapp';
 import { generateGoogleCalendarLink } from '@/lib/googleCalendar';
 
 import FloatingWhatsApp from '@/components/FloatingWhatsApp';
@@ -122,7 +121,7 @@ function WelcomeScreen({
   return (
     <div className="flex flex-col items-center justify-center h-full text-center px-8 animate-fade-in">
       {logoUrl ? (
-        <img src={logoUrl} alt={businessName} className="w-28 h-28 rounded-full object-cover mb-8 shadow-lg" />
+        <img src={logoUrl} alt={businessName} className="w-28 h-28 rounded-full object-cover mb-8 shadow-lg" loading="lazy" />
       ) : (
         <div className="w-28 h-28 rounded-full bg-gradient-to-br from-gold to-gold-dark flex items-center justify-center mb-8 shadow-lg">
           <Sparkles className="w-14 h-14 text-primary-foreground" />
@@ -726,13 +725,49 @@ const BookingWizard = () => {
 
       if (error) throw error;
 
-      // Try WhatsApp via edge function (non-blocking)
-      sendWhatsAppViaEdge(
-        data,
-        { name: selectedService.name, duration_min: selectedService.duration_min },
-        { business_name: settings?.business_name, business_phone: settings?.business_phone, business_address: settings?.business_address, admin_phone: settings?.admin_phone }
-      ).catch(() => {});
+      // CRITICAL: Await WhatsApp so UI loading stays and success/step 5 only run after Edge Function finishes (avoids EarlyDrop).
+      try {
+        await supabase.functions.invoke('send-whatsapp', {
+          body: {
+            booking: {
+              id: data.id,
+              customer_name: formData.customerName,
+              customer_phone: formData.customerPhone,
+              booking_date: dateStr,
+              booking_time: selectedTime,
+              total_price: Number(selectedService.price),
+              notes: formData.notes || null,
+            },
+            service: {
+              name: selectedService.name,
+              duration_min: selectedService.duration_min,
+            },
+          },
+        });
+      } catch (err) {
+        console.warn('WhatsApp notification skipped/failed:', err);
+      }
 
+      // Create Google Calendar event (non-blocking)
+      if (settings?.google_calendar_connected) {
+        supabase.functions.invoke('create-google-calendar-event', {
+          body: {
+            booking_id: data.id,
+            customer_name: formData.customerName,
+            customer_phone: formData.customerPhone,
+            customer_email: formData.customerEmail || null,
+            booking_date: dateStr,
+            booking_time: selectedTime,
+            service_name: selectedService.name,
+            service_duration_min: selectedService.duration_min,
+            notes: formData.notes || null,
+          },
+        }).catch((err) => {
+          console.error('Failed to create Google Calendar event:', err);
+        });
+      }
+
+      // Return only after WhatsApp invoke completes — keeps isSubmitting true and prevents EarlyDrop
       return data;
     },
     onSuccess: (data, method) => {

@@ -93,10 +93,11 @@ const Index = () => {
             transition={{ duration: 0.4 }}
           >
             {settings?.business_logo_url ? (
-              <img 
-                src={settings.business_logo_url} 
-                alt={settings?.business_name || 'לוגו'} 
-                className="h-16 md:h-20 lg:h-24 mx-auto object-contain mb-2 max-w-md md:max-w-lg" 
+              <img
+                src={settings.business_logo_url}
+                alt={settings?.business_name || 'לוגו'}
+                className="h-16 md:h-20 lg:h-24 mx-auto object-contain mb-2 max-w-md md:max-w-lg"
+                loading="lazy"
               />
             ) : (
               <h1 className={`text-3xl md:text-4xl lg:text-5xl font-bold tracking-wide mx-auto max-w-md md:max-w-lg ${bgImageUrl ? 'text-white' : 'text-foreground'}`}>
