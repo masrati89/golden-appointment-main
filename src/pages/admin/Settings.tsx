@@ -22,7 +22,7 @@ const tabs = [
 export default function AdminSettings() {
   const queryClient = useQueryClient();
   const { user } = useAdminAuth();
-  const { data: settings, isLoading } = useSettings(user?.id);
+  const { data: settings, isLoading } = useSettings();
   const [form, setForm] = useState<Record<string, any>>({});
   const [activeTab, setActiveTab] = useState('general');
 
@@ -91,37 +91,32 @@ export default function AdminSettings() {
     'stripe_secret_key', 'whatsapp_api_token', 'whatsapp_float_number', 'working_days',
     'working_hours_end', 'working_hours_start',
     'instagram_url', 'facebook_url', 'show_instagram', 'show_facebook',
-    'whatsapp_enabled', 'whatsapp_api_url', 'whatsapp_admin_phone', 'whatsapp_new_booking_template',
-    'client_whatsapp_enabled', 'whatsapp_client_confirmation_template',
+    'whatsapp_enabled',
+    'whatsapp_api_url',
+    'whatsapp_admin_phone',
+    'whatsapp_new_booking_template',
+    'client_whatsapp_enabled',
+    'whatsapp_client_confirmation_template',
   ];
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const { id } = form;
-      if (!id) throw new Error('Missing business_settings id');
+      if (!id) throw new Error('Missing settings id');
 
       const payload: Record<string, any> = {};
       SETTINGS_COLUMNS.forEach((key) => {
         if (key === 'id') return;
         if (!(key in form)) return;
         const value = form[key];
-        if (value === '' || value === undefined) {
-          payload[key] = null;
-        } else if (typeof value === 'boolean') {
-          payload[key] = value;
-        } else {
-          payload[key] = value;
-        }
+        payload[key] = value === '' || value === undefined ? null : value;
       });
 
       const { error } = await supabase
-        .from('business_settings')
+        .from('settings')
         .update(payload)
         .eq('id', id);
-      if (error) {
-        console.error('Settings save error:', error);
-        throw error;
-      }
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });

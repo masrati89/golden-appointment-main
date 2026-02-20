@@ -1,56 +1,41 @@
+/**
+ * useSettings
+ * -----------
+ * גרסה מעודכנת ל-SaaS — מקבלת businessId ומביאה הגדרות לפיו.
+ * תומכת בשני מצבים:
+ *   1. עמוד לקוח (/b/:slug) — מקבל businessId מה-BusinessContext
+ *   2. עמוד אדמין — מקבל את ה-businessId של המשתמש המחובר
+ */
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
-/**
- * Fetches business_settings by id (Auth User ID).
- * Schema: business_settings.id = Auth User UID. No separate settings table.
- *
- * @param userId - Auth User ID. When provided (admin), queries .eq('id', userId).
- *                When omitted (public pages), fetches first row as fallback.
- */
-export const useSettings = (userId?: string | null) => {
+export const useSettings = (businessId?: string | null) => {
   return useQuery({
-    queryKey: ['settings', userId ?? 'anonymous'],
-    staleTime: 5 * 60 * 1000, // 5 minutes - avoid refetch when navigating Settings/Calendar/Bookings
+    queryKey: ['settings', businessId ?? 'first'],
+    staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      try {
-        if (userId) {
-          const { data, error } = await supabase
-            .from('business_settings')
-            .select('*')
-            .eq('id', userId)
-            .maybeSingle();
-
-          console.log('[useSettings] business_settings by id:', { userId, data, error });
-          if (error) {
-            console.error('[useSettings] Supabase error:', error.message, error.code, error.details);
-            throw error;
-          }
-          if (!data) {
-            console.log('[useSettings] No row found for user – user has no settings yet');
-            return null;
-          }
-          return data as Record<string, unknown>;
-        }
-
-        // Fallback for public pages: fetch first row
+      // אם יש businessId — שלוף לפיו
+      if (businessId) {
         const { data, error } = await supabase
-          .from('business_settings')
+          .from('settings')
           .select('*')
-          .limit(1)
+          .eq('business_id', businessId)
           .maybeSingle();
 
-        console.log('[useSettings] business_settings (first row):', { data, error });
-        if (error) {
-          console.error('[useSettings] Supabase error:', error.message, error.code, error.details);
-          throw error;
-        }
-        return (data as Record<string, unknown>) ?? null;
-      } catch (e) {
-        console.warn('[useSettings] fetch failed', e);
-        throw e;
+        if (error) throw error;
+        return data;
       }
+
+      // Fallback: שורה ראשונה (לעמודים ישנים שעדיין לא עודכנו)
+      const { data, error } = await supabase
+        .from('settings')
+        .select('*')
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
     },
   });
 };

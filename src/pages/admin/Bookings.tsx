@@ -7,6 +7,8 @@ import { toast } from 'sonner';
 import { formatHebrewDate } from '@/lib/dateHelpers';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { useAdminAuth } from '@/contexts/AdminAuthContext';
+import { useSettings } from '@/hooks/useSettings';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,13 +46,16 @@ const paymentLabels: Record<string, string> = {
 
 export default function BookingsManagement() {
   const queryClient = useQueryClient();
+  const { user } = useAdminAuth();
+  const { data: settings } = useSettings(user?.id);
+  const businessId = settings?.business_id ?? null;
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteDialogBookingId, setDeleteDialogBookingId] = useState<string | null>(null);
 
   const { data: bookings, isLoading } = useQuery({
-    queryKey: ['admin-bookings', statusFilter, dateFilter],
+    queryKey: ['admin-bookings', statusFilter, dateFilter, businessId],
     queryFn: async () => {
       let query = supabase
         .from('bookings')
@@ -58,6 +63,7 @@ export default function BookingsManagement() {
         .order('booking_date', { ascending: false })
         .order('booking_time', { ascending: false })
         .limit(200);
+      if (businessId) query = query.eq('business_id', businessId);
 
       if (statusFilter !== 'all') query = query.eq('status', statusFilter);
 

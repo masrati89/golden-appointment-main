@@ -10,7 +10,6 @@ import { BookingProvider } from "@/contexts/BookingContext";
 import { BusinessProvider } from "@/contexts/BusinessContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ClientProtectedRoute } from "@/components/ClientProtectedRoute";
-import SuperAdminLayout, { SuperAdminRoute } from "@/components/super-admin/SuperAdminLayout";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { AppLoader } from "@/components/AppLoader";
 import { LoadingScreen } from "@/components/LoadingScreen";
@@ -36,9 +35,6 @@ const ClientLogin       = lazy(() => import("./pages/auth/ClientLogin"));
 const AuthError         = lazy(() => import("./pages/auth/AuthError"));
 const AuthCallback      = lazy(() => import("./pages/auth/AuthCallback"));
 const ClientDashboard   = lazy(() => import("./pages/dashboard/ClientDashboard"));
-const SuperAdminDashboard = lazy(() => import("./pages/super-admin/SuperAdminDashboard"));
-const BusinessDetail      = lazy(() => import("./pages/super-admin/BusinessDetail"));
-const NewBusinessForm     = lazy(() => import("./pages/super-admin/NewBusinessForm"));
 
 const queryClient = new QueryClient();
 
@@ -58,15 +54,7 @@ const App = () => (
                 <Suspense fallback={<AppLoader />}>
                   <Routes>
 
-                    {/* ─── דפי עסק (SaaS) ─────────────────────────────── */}
-                    {/*
-                     * /b/:slug         — דף נחיתה של עסק ספציפי
-                     * /b/:slug/book    — זרימת הזמנת תור
-                     * /b/:slug/success — אישור הזמנה
-                     *
-                     * BusinessProvider עוטף את כל הנתיבים האלה
-                     * ומספק את ה-businessId לכל הקומפוננטות בפנים.
-                     */}
+                    {/* SaaS business routes */}
                     <Route path="/b/:slug" element={
                       <BusinessProvider>
                         <BusinessPage />
@@ -83,19 +71,16 @@ const App = () => (
                       </BusinessProvider>
                     } />
 
-                    {/* ─── דפים ציבוריים (ישנים — נשמרים לתאימות) ─────── */}
                     <Route path="/" element={<Index />} />
                     <Route path="/booking-menu" element={<BookingVertical />} />
                     <Route path="/book/:serviceId" element={<BookingVertical />} />
                     <Route path="/booking-success" element={<BookingSuccess />} />
 
-                    {/* ─── אימות לקוח ─────────────────────────────────── */}
                     <Route path="/login" element={<ClientLogin />} />
                     <Route path="/auth/login" element={<ClientLogin />} />
                     <Route path="/auth/error" element={<AuthError />} />
                     <Route path="/auth/callback" element={<AuthCallback />} />
 
-                    {/* ─── לקוח מחובר ─────────────────────────────────── */}
                     <Route path="/my-bookings" element={
                       <ClientProtectedRoute><MyBookings /></ClientProtectedRoute>
                     } />
@@ -103,7 +88,6 @@ const App = () => (
                       <ClientProtectedRoute><ClientDashboard /></ClientProtectedRoute>
                     } />
 
-                    {/* ─── אדמין ───────────────────────────────────────── */}
                     <Route path="/admin/login" element={<AdminLogin />} />
                     <Route path="/admin" element={
                       <ProtectedRoute><AdminLayout /></ProtectedRoute>
@@ -114,20 +98,6 @@ const App = () => (
                       <Route path="settings"   element={<AdminSettings />} />
                       <Route path="analytics"  element={<AdminAnalytics />} />
                       <Route path="blocked"    element={<BlockedSlots />} />
-                    </Route>
-
-                    <Route
-                      path="/super-admin"
-                      element={
-                        <SuperAdminRoute>
-                          <SuperAdminLayout />
-                        </SuperAdminRoute>
-                      }
-                    >
-                      <Route path="dashboard"      element={<SuperAdminDashboard />} />
-                      <Route path="businesses"     element={<SuperAdminDashboard />} />
-                      <Route path="businesses/new" element={<NewBusinessForm />} />
-                      <Route path="businesses/:id" element={<BusinessDetail />} />
                     </Route>
 
                     <Route path="*" element={<NotFound />} />

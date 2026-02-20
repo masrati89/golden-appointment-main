@@ -7,9 +7,14 @@ import { toast } from 'sonner';
 import { formatHebrewDate } from '@/lib/dateHelpers';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useAdminAuth } from '@/contexts/AdminAuthContext';
+import { useSettings } from '@/hooks/useSettings';
 
 export default function BlockedSlotsPage() {
   const queryClient = useQueryClient();
+  const { user } = useAdminAuth();
+  const { data: settings } = useSettings(user?.id);
+  const businessId = settings?.business_id ?? null;
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({
     date: format(new Date(), 'yyyy-MM-dd'),
@@ -21,12 +26,14 @@ export default function BlockedSlotsPage() {
   const { data: blockedSlots } = useQuery({
     queryKey: ['blocked-slots'],
     queryFn: async () => {
-      const { data } = await supabase
+      let query = supabase
         .from('blocked_slots')
         .select('*')
         .gte('blocked_date', format(new Date(), 'yyyy-MM-dd'))
         .order('blocked_date')
         .order('start_time');
+      if (businessId) query = query.eq('business_id', businessId);
+      const { data } = await query;
       return data ?? [];
     },
   });
@@ -39,6 +46,7 @@ export default function BlockedSlotsPage() {
         start_time: data.startTime,
         end_time: data.endTime,
         reason: data.reason || 'חסום על ידי מנהל',
+        business_id: businessId,
       });
       if (error) throw error;
     },

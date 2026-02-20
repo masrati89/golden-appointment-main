@@ -44,10 +44,10 @@ import {
 import { useSettings } from '@/hooks/useSettings';
 import { useServices } from '@/hooks/useServices';
 import { getAvailableSlots, type TimeSlot } from '@/lib/slotAvailability';
+import { useBusinessSafe } from '@/contexts/BusinessContext';
 import { hebrewDays, hebrewMonths, formatHebrewDate, getHebrewDayName } from '@/lib/dateHelpers';
 import { bookingFormSchema, type BookingFormData } from '@/lib/validations';
 import { downloadICSFile } from '@/lib/calendar';
-import { generateGoogleCalendarLink } from '@/lib/googleCalendar';
 
 import FloatingWhatsApp from '@/components/FloatingWhatsApp';
 import { Input } from '@/components/ui/input';
@@ -197,6 +197,7 @@ function CalendarTimeScreen({
   onSelectTime: (time: string) => void;
 }) {
   const { data: settings } = useSettings();
+  const { businessId } = useBusinessSafe();
   const today = startOfDay(new Date());
   const [currentMonth, setCurrentMonth] = useState(today);
 
@@ -216,7 +217,7 @@ function CalendarTimeScreen({
 
   const { data: slots, isLoading: slotsLoading } = useQuery({
     queryKey: ['slots', serviceId, selectedDate?.toISOString()],
-    queryFn: () => getAvailableSlots(selectedDate!, serviceId, supabase),
+    queryFn: () => getAvailableSlots(selectedDate!, serviceId, supabase, businessId),
     enabled: !!selectedDate && !!serviceId,
   });
 
@@ -725,28 +726,7 @@ const BookingWizard = () => {
 
       if (error) throw error;
 
-      // CRITICAL: Await WhatsApp so UI loading stays and success/step 5 only run after Edge Function finishes (avoids EarlyDrop).
-      try {
-        await supabase.functions.invoke('send-whatsapp', {
-          body: {
-            booking: {
-              id: data.id,
-              customer_name: formData.customerName,
-              customer_phone: formData.customerPhone,
-              booking_date: dateStr,
-              booking_time: selectedTime,
-              total_price: Number(selectedService.price),
-              notes: formData.notes || null,
-            },
-            service: {
-              name: selectedService.name,
-              duration_min: selectedService.duration_min,
-            },
-          },
-        });
-      } catch (err) {
-        console.warn('WhatsApp notification skipped/failed:', err);
-      }
+      // WhatsApp is sent via Database Webhook on INSERT; no frontend invoke.
 
       // Create Google Calendar event (non-blocking)
       if (settings?.google_calendar_connected) {
@@ -767,7 +747,6 @@ const BookingWizard = () => {
         });
       }
 
-      // Return only after WhatsApp invoke completes — keeps isSubmitting true and prevents EarlyDrop
       return data;
     },
     onSuccess: (data, method) => {

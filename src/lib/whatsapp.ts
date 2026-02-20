@@ -1,5 +1,3 @@
-import { supabase } from '@/integrations/supabase/client';
-
 interface BookingForWA {
   id: string;
   booking_date: string;
@@ -112,27 +110,13 @@ ${booking.notes ? `📝 *הערות לקוח:*\n${booking.notes}` : ''}
 }
 
 /**
- * Send WhatsApp notification via edge function (when API token configured).
- * Falls back gracefully if not configured.
+ * WhatsApp is now sent via Supabase Database Webhook on INSERT.
+ * This helper is a no-op for backwards compatibility.
  */
 export async function sendWhatsAppViaEdge(
-  booking: BookingForWA,
-  service: ServiceForWA,
-  settings: SettingsForWA
+  _booking: BookingForWA,
+  _service: ServiceForWA,
+  _settings: SettingsForWA
 ): Promise<boolean> {
-  try {
-    const { data, error } = await supabase.functions.invoke('send-whatsapp', {
-      body: { booking, service, settings },
-    });
-
-    if (error) {
-      console.warn('WhatsApp edge function error:', error);
-      return false;
-    }
-
-    return data?.success ?? false;
-  } catch (err) {
-    console.warn('WhatsApp send failed:', err);
-    return false;
-  }
+  return false;
 }

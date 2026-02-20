@@ -15,6 +15,7 @@ import BookingForm from '@/components/BookingForm';
 import BookingConfirmation from '@/components/BookingConfirmation';
 import { useSettings } from '@/hooks/useSettings';
 import { getAvailableSlots } from '@/lib/slotAvailability';
+import { useBusinessSafe } from '@/contexts/BusinessContext';
 import { formatHebrewDate } from '@/lib/dateHelpers';
 import type { BookingFormData } from '@/lib/validations';
 
@@ -29,6 +30,7 @@ const BookService = () => {
   const [showConfirmation, setShowConfirmation] = useState(false);
 
   const { data: settings } = useSettings();
+  const { businessId } = useBusinessSafe();
 
   const timeSlotRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLDivElement>(null);
@@ -71,7 +73,7 @@ const BookService = () => {
   // Fetch slots when date selected
   const { data: slots, isLoading: slotsLoading } = useQuery({
     queryKey: ['slots', serviceId, selectedDate?.toISOString()],
-    queryFn: () => getAvailableSlots(selectedDate!, serviceId!, supabase),
+    queryFn: () => getAvailableSlots(selectedDate!, serviceId!, supabase, businessId),
     enabled: !!selectedDate && !!serviceId,
   });
 

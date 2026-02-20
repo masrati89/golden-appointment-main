@@ -126,17 +126,19 @@ export async function getAvailableSlots(
   date: Date,
   serviceId: string,
   supabase: SupabaseClient,
+  businessId?: string | null,
 ): Promise<TimeSlot[]> {
-  // 1. Fetch settings from business_settings (single source of truth)
-  const { data: settings } = await supabase
-    .from('business_settings')
-    .select('working_hours_start, working_hours_end, slot_duration_min, working_days, min_advance_hours')
-    .limit(1)
-    .maybeSingle();
+  // 1. Fetch settings
+  let settingsQuery = supabase
+    .from('settings')
+    .select('working_hours_start, working_hours_end, slot_duration_min, working_days, min_advance_hours');
+  if (businessId) {
+    settingsQuery = settingsQuery.eq('business_id', businessId);
+  }
+  const { data: settings } = await settingsQuery.limit(1).maybeSingle();
 
   if (!settings) {
-    console.warn('No business_settings found - using defaults');
-    // Return empty array if no settings found
+    console.warn('No settings found - using defaults');
     return [];
   }
   const s = settings as SettingsForSlots;
@@ -169,11 +171,15 @@ export async function getAvailableSlots(
 
   // 6. Fetch existing bookings with service duration
   const dateStr = format(date, 'yyyy-MM-dd');
-  const { data: bookingsData } = await supabase
+  let bookingsQuery = supabase
     .from('bookings')
     .select('id, booking_date, booking_time, status, service_id')
     .eq('booking_date', dateStr)
     .in('status', ['confirmed', 'pending']);
+  if (businessId) {
+    bookingsQuery = bookingsQuery.eq('business_id', businessId);
+  }
+  const { data: bookingsData } = await bookingsQuery;
 
   // Fetch service durations for all bookings
   const serviceIds = [...new Set((bookingsData ?? []).map((b: any) => b.service_id).filter(Boolean))];
@@ -199,10 +205,14 @@ export async function getAvailableSlots(
   slots = checkSlotAvailability(slots, (bookings ?? []) as unknown as BookingWithService[], duration);
 
   // 8. Fetch blocked slots for this date
-  const { data: blockedSlots } = await supabase
+  let blockedQuery = supabase
     .from('blocked_slots')
     .select('start_time, end_time, reason')
     .eq('blocked_date', dateStr);
+  if (businessId) {
+    blockedQuery = blockedQuery.eq('business_id', businessId);
+  }
+  const { data: blockedSlots } = await blockedQuery;
 
   // 9. Mark slots as unavailable if they fall in blocked time ranges
   if (blockedSlots && blockedSlots.length > 0) {

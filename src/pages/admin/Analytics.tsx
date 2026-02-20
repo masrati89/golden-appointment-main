@@ -3,14 +3,19 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { format, subDays, startOfWeek, startOfMonth, startOfYear, endOfWeek, endOfMonth, endOfYear, eachDayOfInterval } from 'date-fns';
 import { Calendar, DollarSign, TrendingUp } from 'lucide-react';
+import { useAdminAuth } from '@/contexts/AdminAuthContext';
+import { useSettings } from '@/hooks/useSettings';
 
 type Period = 'week' | 'month' | 'year';
 
 export default function AdminAnalytics() {
+  const { user } = useAdminAuth();
+  const { data: settings } = useSettings(user?.id);
+  const businessId = settings?.business_id ?? null;
   const [period, setPeriod] = useState<Period>('month');
 
   const { data: stats } = useQuery({
-    queryKey: ['admin-analytics', period],
+    queryKey: ['admin-analytics', period, businessId],
     queryFn: async () => {
       const startDate =
         period === 'week'
@@ -24,13 +29,15 @@ export default function AdminAnalytics() {
         : period === 'month'
           ? format(endOfMonth(new Date()), 'yyyy-MM-dd')
           : format(endOfYear(new Date()), 'yyyy-MM-dd');
-      const { data: bookings } = await supabase
+      let bookingsQuery = supabase
         .from('bookings')
         .select('booking_date, total_price, status, payment_method, services:service_id(name)')
         .gte('booking_date', startDate)
         .lte('booking_date', endDate)
         .order('booking_date')
         .limit(2000);
+      if (businessId) bookingsQuery = bookingsQuery.eq('business_id', businessId);
+      const { data: bookings } = await bookingsQuery;
 
       if (!bookings) return null;
 

@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { format, addDays, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { useClientAuth } from '@/contexts/ClientAuthContext';
+import { useBusiness } from '@/contexts/BusinessContext';
 import { saveBookingState, getAndClearBookingState } from '@/lib/bookingState';
 import { Info, Lock } from 'lucide-react';
 import {
@@ -67,8 +68,9 @@ const BookingVertical = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const { data: settings } = useSettings();
-  const { data: services, isLoading: servicesLoading } = useServices();
+  const { businessId, business } = useBusiness();
+  const { data: settings } = useSettings(businessId);
+  const { data: services, isLoading: servicesLoading } = useServices(businessId);
   const { isAuthenticated, isLoading: authLoading } = useClientAuth();
 
   // Selection state
@@ -107,7 +109,7 @@ const BookingVertical = () => {
   // Slots query
   const { data: slots, isLoading: slotsLoading } = useQuery({
     queryKey: ['slots', selectedService?.id, selectedDate?.toISOString()],
-    queryFn: () => getAvailableSlots(selectedDate!, selectedService!.id, supabase),
+    queryFn: () => getAvailableSlots(selectedDate!, selectedService!.id, supabase, businessId),
     enabled: !!selectedDate && !!selectedService,
   });
 
@@ -210,13 +212,14 @@ const BookingVertical = () => {
       if (!formData || !selectedDate || !selectedTime || !selectedService) throw new Error('חסרים פרטים');
       const dateStr = format(selectedDate, 'yyyy-MM-dd');
 
-      const { data: conflict } = await supabase
+      let conflictQuery = supabase
         .from('bookings')
         .select('id')
         .eq('booking_date', dateStr)
         .eq('booking_time', selectedTime)
-        .in('status', ['confirmed', 'pending'])
-        .maybeSingle();
+        .in('status', ['confirmed', 'pending']);
+      if (businessId) conflictQuery = conflictQuery.eq('business_id', businessId);
+      const { data: conflict } = await conflictQuery.maybeSingle();
 
       if (conflict) throw new Error('השעה נתפסה, אנא בחר שעה אחרת');
 
@@ -234,6 +237,7 @@ const BookingVertical = () => {
           customer_phone: formData.customerPhone,
           customer_email: formData.customerEmail || session?.user?.email || null,
           client_id: userId, // Link booking to authenticated user
+          business_id: businessId || null,
           notes: formData.notes || null,
           total_price: Number(selectedService.price),
           payment_method: method,
@@ -265,32 +269,33 @@ const BookingVertical = () => {
         });
       }
 
-      // CRITICAL: Await WhatsApp so loading stays and redirect runs only after Edge Function finishes (avoids EarlyDrop).
-      if (method !== 'stripe') {
-        try {
-          await supabase.functions.invoke('send-whatsapp', {
-            body: {
-              booking: {
-                id: data.id,
-                customer_name: formData.customerName,
-                customer_phone: formData.customerPhone,
-                booking_date: dateStr,
-                booking_time: selectedTime,
-                total_price: Number(selectedService.price),
-                notes: formData.notes || null,
-              },
-              service: {
-                name: selectedService.name,
-                duration_min: selectedService.duration_min,
-              },
+      try {
+        const { data: { session: waSession } } = await supabase.auth.getSession();
+        await supabase.functions.invoke('send-whatsapp', {
+          body: {
+            booking: {
+              id: data.id,
+              customer_name: formData.customerName,
+              customer_phone: formData.customerPhone,
+              booking_date: dateStr,
+              booking_time: selectedTime,
+              total_price: Number(selectedService.price),
+              notes: formData.notes || null,
             },
-          });
-        } catch (err) {
-          console.warn('WhatsApp notification skipped/failed:', err);
-        }
+            service: {
+              name: selectedService.name,
+              duration_min: selectedService.duration_min,
+            },
+            business_id: businessId,
+          },
+          headers: waSession?.access_token
+            ? { Authorization: `Bearer ${waSession.access_token}` }
+            : undefined,
+        });
+      } catch (err) {
+        console.warn('WhatsApp notification skipped/failed:', err);
       }
 
-      // Return only after await above — keeps createBooking.isPending true until then; onSuccess/navigate run after this.
       return data;
     },
     onSuccess: (data, method) => {
@@ -303,7 +308,7 @@ const BookingVertical = () => {
         return;
       }
 
-      navigate('/booking-success', {
+      navigate(`/b/${business?.slug}/success`, {
         state: {
           serviceName: selectedService!.name,
           serviceDuration: selectedService!.duration_min,
@@ -323,30 +328,35 @@ const BookingVertical = () => {
     },
   });
 
-  // Handle Stripe payment success — keep loading until WhatsApp invoke finishes to avoid EarlyDrop
+  // Handle Stripe payment success
   const handleStripeSuccess = async () => {
     if (!createdBookingId) return;
     setStripeSuccessLoading(true);
     try {
-      const booking = await supabase.from('bookings').select('*').eq('id', createdBookingId).single();
-      if (booking.data && selectedService) {
+      const bookingRes = await supabase.from('bookings').select('*').eq('id', createdBookingId).single();
+      if (bookingRes.data && selectedService) {
         try {
+          const { data: { session: waSession } } = await supabase.auth.getSession();
           await supabase.functions.invoke('send-whatsapp', {
             body: {
               booking: {
-                id: booking.data.id,
-                customer_name: booking.data.customer_name,
-                customer_phone: booking.data.customer_phone,
-                booking_date: booking.data.booking_date,
-                booking_time: booking.data.booking_time,
-                total_price: booking.data.total_price,
-                notes: booking.data.notes || null,
+                id: bookingRes.data.id,
+                customer_name: bookingRes.data.customer_name,
+                customer_phone: bookingRes.data.customer_phone,
+                booking_date: bookingRes.data.booking_date,
+                booking_time: bookingRes.data.booking_time,
+                total_price: bookingRes.data.total_price,
+                notes: bookingRes.data.notes || null,
               },
               service: {
                 name: selectedService.name,
                 duration_min: selectedService.duration_min,
               },
+              business_id: businessId,
             },
+            headers: waSession?.access_token
+              ? { Authorization: `Bearer ${waSession.access_token}` }
+              : undefined,
           });
         } catch (err) {
           console.warn('WhatsApp notification skipped/failed:', err);

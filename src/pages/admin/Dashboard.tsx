@@ -3,6 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { Calendar, DollarSign, Users, Clock, TrendingUp } from 'lucide-react';
 import { formatHebrewDate } from '@/lib/dateHelpers';
+import { useAdminAuth } from '@/contexts/AdminAuthContext';
+import { useSettings } from '@/hooks/useSettings';
 
 function StatCard({
   icon,
@@ -25,19 +27,24 @@ function StatCard({
 }
 
 export default function AdminDashboard() {
+  const { user } = useAdminAuth();
+  const { data: settings } = useSettings(user?.id);
+  const businessId = settings?.business_id ?? null;
   const today = format(new Date(), 'yyyy-MM-dd');
   const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
 
   const { data: todayBookings } = useQuery({
-    queryKey: ['admin-today-bookings'],
+    queryKey: ['admin-today-bookings', businessId],
     queryFn: async () => {
-      const { data } = await supabase
+      let query = supabase
         .from('bookings')
         .select('*, services:service_id(name)')
         .eq('booking_date', today)
         .in('status', ['confirmed', 'pending'])
         .order('booking_time')
         .limit(100);
+      if (businessId) query = query.eq('business_id', businessId);
+      const { data } = await query;
       return data ?? [];
     },
     refetchInterval: 60000,
@@ -45,15 +52,17 @@ export default function AdminDashboard() {
 
   const monthEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd');
   const { data: monthStats } = useQuery({
-    queryKey: ['admin-month-stats'],
+    queryKey: ['admin-month-stats', businessId],
     queryFn: async () => {
-      const { data } = await supabase
+      let query = supabase
         .from('bookings')
         .select('total_price, customer_phone')
         .gte('booking_date', monthStart)
         .lte('booking_date', monthEnd)
         .in('status', ['confirmed', 'pending', 'completed'])
         .limit(2000);
+      if (businessId) query = query.eq('business_id', businessId);
+      const { data } = await query;
 
       const revenue = data?.reduce((sum, b) => sum + Number(b.total_price || 0), 0) ?? 0;
       const uniqueCustomers = new Set(data?.map((b) => b.customer_phone)).size;

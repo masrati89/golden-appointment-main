@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarClock, Phone, Search, ArrowLeft, LogOut } from 'lucide-react';
+import { CalendarClock, ArrowLeft, LogOut, User } from 'lucide-react';
 import { format, isAfter, startOfDay } from 'date-fns';
 import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
+import { useClientAuth } from '@/contexts/ClientAuthContext';
 
 interface BookingWithService {
   id: string;
@@ -20,28 +20,22 @@ interface BookingWithService {
 
 const MyBookings = () => {
   const navigate = useNavigate();
-  const [phone, setPhone] = useState('');
-  const [savedPhone, setSavedPhone] = useState<string | null>(null);
+  const { user, signOut } = useClientAuth();
   const [bookings, setBookings] = useState<BookingWithService[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const stored = localStorage.getItem('my_bookings_phone');
-    if (stored) {
-      setSavedPhone(stored);
-      fetchBookings(stored);
+    if (user) {
+      fetchBookings();
     }
-  }, []);
+  }, [user]);
 
-  const fetchBookings = async (phoneNum: string) => {
+  const fetchBookings = async () => {
     setLoading(true);
-    setSearched(true);
-    const cleanPhone = phoneNum.replace(/-/g, '');
     const { data, error } = await supabase
       .from('bookings')
       .select('id, booking_date, booking_time, status, total_price, customer_name, services:service_id(name)')
-      .eq('customer_phone', cleanPhone)
+      .eq('client_id', user!.id)
       .order('booking_date', { ascending: false })
       .limit(100);
 
@@ -51,20 +45,9 @@ const MyBookings = () => {
     setLoading(false);
   };
 
-  const handleSearch = () => {
-    if (!phone || phone.length < 10) return;
-    const cleanPhone = phone.replace(/-/g, '');
-    localStorage.setItem('my_bookings_phone', cleanPhone);
-    setSavedPhone(cleanPhone);
-    fetchBookings(cleanPhone);
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('my_bookings_phone');
-    setSavedPhone(null);
-    setBookings([]);
-    setSearched(false);
-    setPhone('');
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/');
   };
 
   const today = startOfDay(new Date());
@@ -117,52 +100,25 @@ const MyBookings = () => {
     </div>
   );
 
-  // State A: Phone input
-  if (!savedPhone) {
-    return (
-      <Layout>
-        <div className="flex flex-col items-center justify-center py-16 px-4">
-          <div className="glass-card p-8 max-w-sm w-full text-center space-y-5">
-            <CalendarClock className="w-14 h-14 text-primary mx-auto" />
-            <h2 className="text-2xl font-bold text-foreground">התורים שלי</h2>
-            <p className="text-sm text-muted-foreground">הכניסי את מספר הטלפון שלך כדי לראות את התורים</p>
-
-            <div className="relative">
-              <Phone className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                type="tel"
-                placeholder="05X-XXX-XXXX"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                className="pr-10 text-center border-primary/40 focus:border-primary"
-                dir="ltr"
-              />
-            </div>
-
-            <Button onClick={handleSearch} className="w-full" disabled={phone.length < 10}>
-              <Search className="w-4 h-4" />
-              מצא תורים
-            </Button>
-          </div>
-        </div>
-      </Layout>
-    );
-  }
-
-  // State B: Bookings list
   return (
     <Layout>
       <div className="py-4 space-y-4 max-w-lg mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-bold text-foreground">שלום, {savedPhone}</h2>
-            <p className="text-xs text-muted-foreground">התורים שלך</p>
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
+              <User className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-foreground">
+                {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'שלום'}
+              </h2>
+              <p className="text-xs text-muted-foreground">התורים שלך</p>
+            </div>
           </div>
           <Button variant="ghost" size="sm" onClick={handleLogout}>
             <LogOut className="w-4 h-4" />
-            שינוי
+            יציאה
           </Button>
         </div>
 
@@ -170,13 +126,13 @@ const MyBookings = () => {
           <div className="flex justify-center py-12">
             <div className="w-8 h-8 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
           </div>
-        ) : searched && bookings.length === 0 ? (
+        ) : bookings.length === 0 ? (
           <div className="glass-card p-8 text-center space-y-4">
             <CalendarClock className="w-12 h-12 text-muted-foreground mx-auto" />
-            <p className="text-foreground font-semibold">לא נמצאו תורים למספר זה</p>
+            <p className="text-foreground font-semibold">עדיין אין לך תורים</p>
             <Button onClick={() => navigate('/booking-menu')}>
               <ArrowLeft className="w-4 h-4" />
-              הזמינו תור חדש
+              הזמינו תור עכשיו
             </Button>
           </div>
         ) : (

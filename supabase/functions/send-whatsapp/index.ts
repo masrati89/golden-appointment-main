@@ -1,27 +1,15 @@
 /**
  * WhatsApp Notification Edge Function
- * Sends automated WhatsApp notifications for new bookings:
- * - Admin notifications (if whatsapp_enabled = true)
- * - Client confirmations (if client_whatsapp_enabled = true)
- * Uses admin-configured templates and handles both concurrently
+ * גרסה סופית — שולפת הכל מטבלת settings לפי business_id
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-/**
- * Format phone number for Green API chatId.
- * - Remove all non-numeric characters (spaces, dashes, plus signs).
- * - If the cleaned number starts with "0", replace the leading "0" with "972".
- * - If it already starts with "972", leave the prefix as is.
- * - Green API requirement: append @c.us to the end.
- * Example: 054-123-4567 → 972541234567@c.us
- */
 function formatPhoneForGreenAPI(phone: string): string {
   const cleaned = phone.replace(/\D/g, '');
   if (!cleaned.length) return '';
@@ -38,9 +26,6 @@ function formatPhoneForGreenAPI(phone: string): string {
   return normalized + '@c.us';
 }
 
-/**
- * Parse template and replace placeholders with actual booking data
- */
 function parseTemplate(template: string, booking: any, service: any): string {
   return template
     .replace(/\{\{name\}\}/g, booking.customer_name || 'לא צוין')
@@ -48,14 +33,9 @@ function parseTemplate(template: string, booking: any, service: any): string {
     .replace(/\{\{service\}\}/g, service?.name || 'לא צוין')
     .replace(/\{\{date\}\}/g, booking.booking_date || 'לא צוין')
     .replace(/\{\{time\}\}/g, booking.booking_time || 'לא צוין')
-    .replace(/\{\{date}}\s+{{time\}\}/g, `${booking.booking_date} ${booking.booking_time}`)
     .replace(/\{\{price\}\}/g, `₪${booking.total_price || 0}`);
 }
 
-/**
- * Send WhatsApp message via Green API
- * Payload uses chatId (e.g. 972541234567@c.us), not phone
- */
 async function sendWhatsAppMessage(
   apiUrl: string,
   apiToken: string,
@@ -63,7 +43,7 @@ async function sendWhatsAppMessage(
   message: string
 ): Promise<{ success: boolean; error?: string }> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
 
   try {
     const response = await fetch(apiUrl, {
@@ -72,10 +52,7 @@ async function sendWhatsAppMessage(
         "Content-Type": "application/json",
         "Authorization": `Bearer ${apiToken}`,
       },
-      body: JSON.stringify({
-        chatId: chatId,
-        message: message,
-      }),
+      body: JSON.stringify({ chatId, message }),
       signal: controller.signal,
     });
 
@@ -83,10 +60,7 @@ async function sendWhatsAppMessage(
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => 'Unknown error');
-      return {
-        success: false,
-        error: `API returned ${response.status}: ${errorText}`,
-      };
+      return { success: false, error: `API returned ${response.status}: ${errorText}` };
     }
 
     await response.json().catch(() => ({}));
@@ -110,7 +84,7 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
-    const { booking, service } = await req.json();
+    const { booking, service, business_id } = await req.json();
 
     if (!booking || !service) {
       return new Response(
@@ -119,9 +93,9 @@ serve(async (req) => {
       );
     }
 
-    // Fetch WhatsApp settings from business_settings
-    const { data: whatsappSettings, error: settingsError } = await supabase
-      .from("business_settings")
+    // ─── שלוף הכל מ-settings לפי business_id ─────────────────
+    let query = supabase
+      .from("settings")
       .select(`
         whatsapp_enabled,
         whatsapp_api_url,
@@ -129,131 +103,119 @@ serve(async (req) => {
         whatsapp_admin_phone,
         whatsapp_new_booking_template,
         client_whatsapp_enabled,
-        whatsapp_client_confirmation_template
-      `)
-      .limit(1)
-      .maybeSingle();
+        whatsapp_client_confirmation_template,
+        admin_phone,
+        business_name
+      `);
 
-    if (settingsError) {
-      console.error("Error fetching WhatsApp settings:", settingsError);
+    if (business_id) {
+      query = query.eq('business_id', business_id);
+      console.log(`[WhatsApp] business_id: ${business_id}`);
+    } else {
+      console.warn('[WhatsApp] No business_id — using first row fallback');
+    }
+
+    const { data: s, error: sError } = await query.limit(1).maybeSingle();
+
+    if (sError) {
+      console.error("Error fetching settings:", sError);
       return new Response(
         JSON.stringify({ success: false, error: "Failed to fetch settings" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Check if any WhatsApp feature is enabled
-    const adminEnabled = whatsappSettings?.whatsapp_enabled && 
-                         whatsappSettings?.whatsapp_api_url && 
-                         whatsappSettings?.whatsapp_api_token && 
-                         whatsappSettings?.whatsapp_admin_phone;
+    if (!s) {
+      console.error("No settings found for business_id:", business_id);
+      return new Response(
+        JSON.stringify({ success: false, error: "Settings not found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
-    const clientEnabled = whatsappSettings?.client_whatsapp_enabled && 
-                          whatsappSettings?.whatsapp_api_url && 
-                          whatsappSettings?.whatsapp_api_token && 
-                          booking.customer_phone;
+    // admin_phone כ-fallback אם whatsapp_admin_phone לא מוגדר
+    const adminPhone = s.whatsapp_admin_phone || s.admin_phone;
+    const apiToken   = s.whatsapp_api_token;
+    const apiUrl     = s.whatsapp_api_url;
+
+    const adminEnabled = s.whatsapp_enabled && apiUrl && apiToken && adminPhone;
+    const clientEnabled = s.client_whatsapp_enabled && apiUrl && apiToken && booking.customer_phone;
 
     if (!adminEnabled && !clientEnabled) {
-      console.log("WhatsApp notifications disabled or missing credentials - skipping");
+      console.log(`[WhatsApp] Disabled or missing credentials for business_id: ${business_id}`);
+      console.log(`[WhatsApp] enabled=${s.whatsapp_enabled} url=${!!apiUrl} token=${!!apiToken} phone=${!!adminPhone}`);
       return new Response(
         JSON.stringify({ success: false, reason: "disabled_or_missing_credentials" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Prepare promises for concurrent execution
+    // ─── שלח הודעות במקביל ───────────────────────────────────
     const promises: Promise<{ target: string; result: { success: boolean; error?: string } }>[] = [];
 
-    // Admin notification (if enabled)
     if (adminEnabled) {
-      const adminChatId = formatPhoneForGreenAPI(whatsappSettings.whatsapp_admin_phone);
+      const adminChatId = formatPhoneForGreenAPI(adminPhone!);
       if (adminChatId) {
-        const adminTemplate = whatsappSettings.whatsapp_new_booking_template || 
-          '💖 תור חדש נקבע במכון היופי!\n👤 לקוחה: {{name}}\n📱 טלפון: {{phone}}\n💅 טיפול: {{service}}\n📅 תאריך ושעה: {{date}} {{time}}';
-        const adminMessage = parseTemplate(adminTemplate, booking, service);
-
+        const template = s.whatsapp_new_booking_template ||
+          '💖 תור חדש נקבע!\n👤 שם: {{name}}\n📱 טלפון: {{phone}}\n💅 טיפול: {{service}}\n📅 תאריך: {{date}}\n🕐 שעה: {{time}}\n💰 מחיר: {{price}}';
         promises.push(
-          sendWhatsAppMessage(
-            whatsappSettings.whatsapp_api_url,
-            whatsappSettings.whatsapp_api_token,
-            adminChatId,
-            adminMessage
-          ).then(result => ({ target: 'admin', result }))
+          sendWhatsAppMessage(apiUrl!, apiToken!, adminChatId, parseTemplate(template, booking, service))
+            .then(result => ({ target: 'admin', result }))
         );
       }
     }
 
-    // Client confirmation (if enabled)
     if (clientEnabled) {
       const clientChatId = formatPhoneForGreenAPI(booking.customer_phone);
-      const clientTemplate = whatsappSettings.whatsapp_client_confirmation_template || 
-        'היי {{name}} שריינו לך את התור! 🌸\nסוג טיפול: {{service}}\nמתי? {{date}}\nמחכות לראותך!';
-      const clientMessage = parseTemplate(clientTemplate, booking, service);
-
       if (clientChatId) {
+        const template = s.whatsapp_client_confirmation_template ||
+          'היי {{name}} שריינו לך את התור! 🌸\nסוג טיפול: {{service}}\nתאריך: {{date}}\nשעה: {{time}}\nמחכות לראותך!';
         promises.push(
-          sendWhatsAppMessage(
-            whatsappSettings.whatsapp_api_url,
-            whatsappSettings.whatsapp_api_token,
-            clientChatId,
-            clientMessage
-          ).then(result => ({ target: 'client', result }))
-          .catch(error => {
-            // Resilience: Log client notification errors but don't fail the booking
-            console.warn("Client WhatsApp notification failed (non-blocking):", error);
-            return { target: 'client', result: { success: false, error: String(error) } };
-          })
+          sendWhatsAppMessage(apiUrl!, apiToken!, clientChatId, parseTemplate(template, booking, service))
+            .then(result => ({ target: 'client', result }))
+            .catch(error => ({ target: 'client', result: { success: false, error: String(error) } }))
         );
       }
     }
 
-    // Execute both notifications concurrently using Promise.allSettled
-    // This ensures one failing doesn't block the other
     const results = await Promise.allSettled(promises);
-
     const summary: any[] = [];
     let allSuccessful = true;
 
     for (const result of results) {
       if (result.status === 'fulfilled') {
-        const { target, result: sendResult } = result.value;
-        summary.push({ target, ...sendResult });
-        if (!sendResult.success) {
-          allSuccessful = false;
-        }
+        const { target, result: r } = result.value;
+        summary.push({ target, ...r });
+        if (!r.success) allSuccessful = false;
       } else {
         allSuccessful = false;
         summary.push({ target: 'unknown', success: false, error: String(result.reason) });
       }
     }
 
-    // Update booking whatsapp status if at least one notification succeeded
     const hasSuccess = summary.some((r: any) => r.success);
     if (hasSuccess) {
-      await supabase
-        .from("bookings")
-        .update({ whatsapp_sent: true, whatsapp_sent_at: new Date().toISOString() })
-        .eq("id", booking.id)
-        .catch((err) => console.warn("Failed to update booking WhatsApp status:", err));
+      try {
+        await supabase
+          .from("bookings")
+          .update({ whatsapp_sent: true, whatsapp_sent_at: new Date().toISOString() })
+          .eq("id", booking.id);
+      } catch (err) {
+        console.warn("Failed to update whatsapp status:", err);
+      }
     }
 
-    // Log results for debugging
-    console.log("WhatsApp notifications summary:", summary);
+    console.log(`[WhatsApp] Summary:`, JSON.stringify(summary));
 
     return new Response(
-      JSON.stringify({ 
-        success: allSuccessful, 
-        results: summary,
-        message: hasSuccess ? "Notifications sent" : "Some notifications failed"
-      }),
+      JSON.stringify({ success: allSuccessful, results: summary, business_id: business_id || null }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
+
   } catch (error) {
     console.error("Edge function error:", error);
-    // Non-blocking: Return success even if there's an error
-    // The booking was already saved, so we don't want to fail here
     return new Response(
-      JSON.stringify({ success: false, error: String(error), nonBlocking: true }),
+      JSON.stringify({ success: false, error: String(error) }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
