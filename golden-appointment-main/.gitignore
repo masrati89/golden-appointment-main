@@ -27,11 +27,3 @@ dist-ssr
 *service*account*.json
 *credentials*.json
 *-????????.json
-
-# Environment variables - NEVER commit secrets
-.env
-.env.*
-!.env.example
-
-# Claude Code session data
-.claude/

@@ -1,0 +1,17 @@
+{
+  "name": "מכון היופי שלך",
+  "short_name": "מכון היופי שלך",
+  "description": "מערכת לניהול תורים ויומן לעסקים",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    }
+  ]
+}
