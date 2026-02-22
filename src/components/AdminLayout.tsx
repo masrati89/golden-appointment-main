@@ -1,5 +1,7 @@
 import { useState, useRef, useLayoutEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import { useSettings } from '@/hooks/useSettings';
 import {
@@ -28,11 +30,25 @@ const bottomNavItems = navItems.slice(0, 4);
 const moreNavItems = navItems.slice(4);
 
 export default function AdminLayout() {
-  const { logout } = useAdminAuth();
+  const { logout, user } = useAdminAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const mainRef = useRef<HTMLElement>(null);
   const { data: settings } = useSettings();
+  const { data: businessSlug } = useQuery({
+    queryKey: ['business-slug', settings?.business_id],
+    enabled: !!settings?.business_id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('businesses')
+        .select('slug')
+        .eq('id', settings!.business_id)
+        .single();
+      return data?.slug ?? null;
+    },
+  });
+
+  const homePath = businessSlug ? `/b/${businessSlug}` : '/';
   const [moreOpen, setMoreOpen] = useState(false);
 
   // Reset scroll BEFORE new page renders (useLayoutEffect runs synchronously)
@@ -58,10 +74,10 @@ export default function AdminLayout() {
         <button onClick={handleLogout} className="p-2 hover:bg-secondary rounded-lg text-destructive min-w-[48px] min-h-[48px] flex items-center justify-center">
           <LogOut className="w-5 h-5" />
         </button>
-        <button onClick={() => navigate(settings?.business_slug ? `/b/${settings.business_slug}` : '/')} className="font-bold text-lg text-foreground hover:text-primary transition-colors">
+        <button onClick={() => navigate(homePath)} className="font-bold text-lg text-foreground hover:text-primary transition-colors">
           {settings?.business_name || 'מכון היופי שלך'}
         </button>
-        <button onClick={() => navigate(settings?.business_slug ? `/b/${settings.business_slug}` : '/')} className="p-2 hover:bg-secondary rounded-lg text-muted-foreground hover:text-primary min-w-[48px] min-h-[48px] flex items-center justify-center transition-colors">
+        <button onClick={() => navigate(homePath)} className="p-2 hover:bg-secondary rounded-lg text-muted-foreground hover:text-primary min-w-[48px] min-h-[48px] flex items-center justify-center transition-colors">
           <Home className="w-5 h-5" />
         </button>
       </header>
@@ -69,10 +85,10 @@ export default function AdminLayout() {
       {/* Desktop Sidebar */}
       <aside className="hidden lg:block fixed top-0 right-0 h-full w-64 glass-card rounded-none border-l border-border z-40">
         <div className="h-14 border-b border-border flex items-center justify-between px-6">
-          <button onClick={() => navigate(settings?.business_slug ? `/b/${settings.business_slug}` : '/')} className="font-bold text-xl text-foreground hover:text-primary transition-colors">
+          <button onClick={() => navigate(homePath)} className="font-bold text-xl text-foreground hover:text-primary transition-colors">
             {settings?.business_name || 'מכון היופי שלך'}
           </button>
-          <button onClick={() => navigate(settings?.business_slug ? `/b/${settings.business_slug}` : '/')} className="p-1 hover:bg-secondary rounded-lg text-muted-foreground hover:text-primary transition-colors">
+          <button onClick={() => navigate(homePath)} className="p-1 hover:bg-secondary rounded-lg text-muted-foreground hover:text-primary transition-colors">
             <Home className="w-5 h-5" />
           </button>
         </div>

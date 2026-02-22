@@ -88,6 +88,7 @@ const BookService = () => {
     serviceId ?? null,
     calendarStart,
     calendarEnd,
+    businessId,
   );
 
   // Create booking (Phase 2 logic intact)
@@ -259,6 +260,7 @@ const BookService = () => {
               maxDate={addDays(new Date(), settings?.max_advance_days ?? 30)}
               disabledDays={disabledDays}
               availabilityCounts={availabilityCounts ?? {}}
+              businessId={businessId}
             />
           )}
         </div>

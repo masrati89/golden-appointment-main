@@ -1,10 +1,11 @@
-import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAdminAuth } from '@/contexts/AdminAuthContext';
+import { useSettings } from '@/hooks/useSettings';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { Calendar, DollarSign, Users, Clock, TrendingUp } from 'lucide-react';
 import { formatHebrewDate } from '@/lib/dateHelpers';
-import { useAdminAuth } from '@/contexts/AdminAuthContext';
-import { useSettings } from '@/hooks/useSettings';
 
 function StatCard({
   icon,
@@ -27,14 +28,15 @@ function StatCard({
 }
 
 export default function AdminDashboard() {
-  const { user } = useAdminAuth();
-  const { data: settings } = useSettings(user?.id);
-  const businessId = settings?.business_id ?? null;
   const today = format(new Date(), 'yyyy-MM-dd');
   const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
+  const { user } = useAdminAuth();
+  const { data: settings } = useSettings();
+  const businessId = settings?.business_id ?? null;
 
   const { data: todayBookings } = useQuery({
     queryKey: ['admin-today-bookings', businessId],
+    enabled: !!businessId,
     queryFn: async () => {
       let query = supabase
         .from('bookings')
@@ -47,12 +49,12 @@ export default function AdminDashboard() {
       const { data } = await query;
       return data ?? [];
     },
-    refetchInterval: 60000,
   });
 
   const monthEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd');
   const { data: monthStats } = useQuery({
     queryKey: ['admin-month-stats', businessId],
+    enabled: !!businessId,
     queryFn: async () => {
       let query = supabase
         .from('bookings')
@@ -63,12 +65,38 @@ export default function AdminDashboard() {
         .limit(2000);
       if (businessId) query = query.eq('business_id', businessId);
       const { data } = await query;
-
       const revenue = data?.reduce((sum, b) => sum + Number(b.total_price || 0), 0) ?? 0;
       const uniqueCustomers = new Set(data?.map((b) => b.customer_phone)).size;
       return { revenue, customers: uniqueCustomers, total: data?.length ?? 0 };
     },
   });
+
+  const queryClientInstance = useQueryClient();
+
+  useEffect(() => {
+    if (!businessId) return;
+
+    const channel = supabase
+      .channel(`dashboard-bookings-${businessId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'bookings',
+          filter: `business_id=eq.${businessId}`,
+        },
+        () => {
+          queryClientInstance.invalidateQueries({ queryKey: ['admin-today-bookings', businessId] });
+          queryClientInstance.invalidateQueries({ queryKey: ['admin-month-stats', businessId] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [businessId, queryClientInstance]);
 
   return (
     <div className="space-y-8">

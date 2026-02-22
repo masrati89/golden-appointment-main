@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { CalendarClock, ArrowLeft, LogOut, User } from 'lucide-react';
 import { format, isAfter, startOfDay } from 'date-fns';
@@ -21,29 +22,20 @@ interface BookingWithService {
 const MyBookings = () => {
   const navigate = useNavigate();
   const { user, signOut } = useClientAuth();
-  const [bookings, setBookings] = useState<BookingWithService[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (user) {
-      fetchBookings();
-    }
-  }, [user]);
-
-  const fetchBookings = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('bookings')
-      .select('id, booking_date, booking_time, status, total_price, customer_name, services:service_id(name)')
-      .eq('client_id', user!.id)
-      .order('booking_date', { ascending: false })
-      .limit(100);
-
-    if (!error && data) {
-      setBookings(data as BookingWithService[]);
-    }
-    setLoading(false);
-  };
+  const { data: bookings = [], isLoading: loading } = useQuery({
+    queryKey: ['my-bookings', user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('id, booking_date, booking_time, status, total_price, customer_name, services:service_id(name)')
+        .eq('client_id', user!.id)
+        .order('booking_date', { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      return (data ?? []) as BookingWithService[];
+    },
+  });
 
   const handleLogout = async () => {
     await signOut();

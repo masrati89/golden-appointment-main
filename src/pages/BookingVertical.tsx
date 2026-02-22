@@ -7,7 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { format, addDays, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { useClientAuth } from '@/contexts/ClientAuthContext';
-import { useBusiness } from '@/contexts/BusinessContext';
+import { useBusinessSafe } from '@/contexts/BusinessContext';
 import { saveBookingState, getAndClearBookingState } from '@/lib/bookingState';
 import { Info, Lock } from 'lucide-react';
 import {
@@ -68,7 +68,7 @@ const BookingVertical = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const { businessId, business } = useBusiness();
+  const { businessId, business } = useBusinessSafe();
   const { data: settings } = useSettings(businessId);
   const { data: services, isLoading: servicesLoading } = useServices(businessId);
   const { isAuthenticated, isLoading: authLoading } = useClientAuth();
@@ -227,6 +227,20 @@ const BookingVertical = () => {
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id || null;
 
+      // בדוק rate limiting — לא יותר מ-3 הזמנות פעילות ללקוח
+      if (userId) {
+        const { data: activeBookings } = await supabase
+          .from('bookings')
+          .select('id')
+          .eq('client_id', userId)
+          .in('status', ['confirmed', 'pending'])
+          .gte('booking_date', format(new Date(), 'yyyy-MM-dd'));
+
+        if (activeBookings && activeBookings.length >= 3) {
+          throw new Error('לא ניתן לקבוע יותר מ-3 תורים פעילים בו זמנית');
+        }
+      }
+
       const { data, error } = await supabase
         .from('bookings')
         .insert({
@@ -366,7 +380,7 @@ const BookingVertical = () => {
       queryClient.invalidateQueries({ queryKey: ['slots'] });
       queryClient.invalidateQueries({ queryKey: ['fully-booked-dates'] });
 
-      navigate('/booking-success', {
+      navigate(`/b/${business?.slug}/success`, {
       state: {
         serviceName: selectedService!.name,
         serviceDuration: selectedService!.duration_min,
@@ -462,6 +476,7 @@ const BookingVertical = () => {
               }}
               maxDate={addDays(new Date(), settings?.max_advance_days ?? 30)}
               disabledDays={disabledDays}
+              businessId={businessId}
             />
           </section>
         )}

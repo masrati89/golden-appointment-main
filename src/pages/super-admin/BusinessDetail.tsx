@@ -3,13 +3,15 @@
  */
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowRight, ExternalLink, RefreshCw, Calendar, DollarSign, MessageCircle, AlertTriangle, Save, Clock } from 'lucide-react';
+import { ArrowRight, ExternalLink, RefreshCw, Calendar, DollarSign, MessageCircle, AlertTriangle, Save, Clock, Loader2, Plus } from 'lucide-react';
 import { useBusinessDetail, useUpdateBusiness, useRenewSubscription, useAuditLog } from '@/hooks/useSuperAdmin';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 const operationLabels: Record<string, string> = { INSERT: 'נוצר', UPDATE: 'עודכן', DELETE: 'נמחק' };
 
@@ -34,6 +36,9 @@ export default function BusinessDetail() {
   const { data: auditLog } = useAuditLog(id ?? '', 30);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Record<string, string>>({});
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [creatingAdmin, setCreatingAdmin] = useState(false);
 
   if (isLoading) {
     return (
@@ -64,6 +69,24 @@ export default function BusinessDetail() {
   const saveEdit = async () => {
     await updateBusiness.mutateAsync({ id: business.id, ...form });
     setEditing(false);
+  };
+
+  const createAdminUser = async () => {
+    if (!newAdminEmail || !newAdminPassword) return;
+    setCreatingAdmin(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-admin-user', {
+        body: { email: newAdminEmail, password: newAdminPassword, business_id: business.id },
+      });
+      if (error || !data?.success) throw new Error(data?.error || error?.message || 'שגיאה');
+      toast.success(`אדמין נוצר בהצלחה — ${newAdminEmail}`);
+      setNewAdminEmail('');
+      setNewAdminPassword('');
+    } catch (err: any) {
+      toast.error('שגיאה ביצירת אדמין: ' + err.message);
+    } finally {
+      setCreatingAdmin(false);
+    }
   };
 
   return (
@@ -170,6 +193,29 @@ export default function BusinessDetail() {
             ))}
           </div>
         )}
+      </div>
+
+      <div className="glass-card p-5 rounded-2xl">
+        <h2 className="font-bold text-foreground mb-1">צור אדמין לעסק</h2>
+        <p className="text-xs text-muted-foreground mb-4">המשתמש יוכל להתחבר ל-/admin/login ולנהל את העסק הזה בלבד</p>
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs">אימייל</Label>
+            <Input type="email" value={newAdminEmail} onChange={(e) => setNewAdminEmail(e.target.value)}
+              placeholder="admin@business.com" className="mt-1 h-10" dir="ltr" />
+          </div>
+          <div>
+            <Label className="text-xs">סיסמה זמנית</Label>
+            <Input type="password" value={newAdminPassword} onChange={(e) => setNewAdminPassword(e.target.value)}
+              placeholder="לפחות 8 תווים" className="mt-1 h-10" dir="ltr" />
+          </div>
+          <Button className="w-full" onClick={createAdminUser}
+            disabled={!newAdminEmail || !newAdminPassword.length || creatingAdmin}>
+            {creatingAdmin
+              ? <><Loader2 className="w-4 h-4 animate-spin" />יוצר...</>
+              : <><Plus className="w-4 h-4" />צור אדמין</>}
+          </Button>
+        </div>
       </div>
     </div>
   );

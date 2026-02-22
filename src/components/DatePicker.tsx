@@ -27,6 +27,7 @@ interface DatePickerProps {
   onSelectDate: (date: Date) => void;
   maxDate?: Date;
   disabledDays?: number[];
+  businessId?: string | null;
 }
 
 const DatePicker = memo(({
@@ -34,11 +35,12 @@ const DatePicker = memo(({
   onSelectDate,
   maxDate,
   disabledDays = [],
+  businessId,
 }: DatePickerProps) => {
   const today = startOfDay(new Date());
   const [currentMonth, setCurrentMonth] = useState(selectedDate ?? today);
 
-  const { data: fullDates = [] } = useMonthAvailability(currentMonth);
+  const { data: fullDates = [] } = useMonthAvailability(currentMonth, businessId);
 
   const canGoPrev = isSameMonth(currentMonth, today) ? false : true;
   const canGoNext = maxDate ? isBefore(startOfMonth(addMonths(currentMonth, 1)), maxDate) : true;

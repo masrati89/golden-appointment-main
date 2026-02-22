@@ -13,7 +13,7 @@ import { useSettings } from '@/hooks/useSettings';
 export default function BlockedSlotsPage() {
   const queryClient = useQueryClient();
   const { user } = useAdminAuth();
-  const { data: settings } = useSettings(user?.id);
+  const { data: settings } = useSettings();
   const businessId = settings?.business_id ?? null;
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({
@@ -24,7 +24,7 @@ export default function BlockedSlotsPage() {
   });
 
   const { data: blockedSlots } = useQuery({
-    queryKey: ['blocked-slots'],
+    queryKey: ['blocked-slots', businessId],
     queryFn: async () => {
       let query = supabase
         .from('blocked_slots')
@@ -41,6 +41,21 @@ export default function BlockedSlotsPage() {
   const blockMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       if (data.startTime >= data.endTime) throw new Error('שעת סיום חייבת להיות אחרי שעת התחלה');
+      // בדוק אם יש תורים קיימים בטווח הזמן הזה
+      let conflictQuery = supabase
+        .from('bookings')
+        .select('id, customer_name, booking_time')
+        .eq('booking_date', data.date)
+        .in('status', ['confirmed', 'pending'])
+        .gte('booking_time', data.startTime)
+        .lt('booking_time', data.endTime);
+      if (businessId) conflictQuery = conflictQuery.eq('business_id', businessId);
+      const { data: conflicts } = await conflictQuery;
+
+      if (conflicts && conflicts.length > 0) {
+        const names = conflicts.map((b) => `${b.customer_name} (${b.booking_time})`).join(', ');
+        throw new Error(`קיימים ${conflicts.length} תורים בזמן זה: ${names}`);
+      }
       const { error } = await supabase.from('blocked_slots').insert({
         blocked_date: data.date,
         start_time: data.startTime,

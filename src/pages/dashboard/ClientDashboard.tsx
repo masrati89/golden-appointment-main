@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, isAfter, startOfDay } from 'date-fns';
 import { useClientAuth } from '@/contexts/ClientAuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -33,12 +33,12 @@ export default function ClientDashboard() {
   const { data: bookings, isLoading: bookingsLoading } = useQuery({
     queryKey: ['client-bookings', user?.id],
     queryFn: async () => {
-      if (!user?.email) return [];
+      if (!user?.id) return [];
 
       const { data, error } = await supabase
         .from('bookings')
         .select('id, booking_date, booking_time, status, total_price, customer_name, customer_email, services:service_id(name)')
-        .eq('customer_email', user.email)
+        .eq('client_id', user.id)
         .order('booking_date', { ascending: false })
         .limit(100);
 
@@ -52,7 +52,7 @@ export default function ClientDashboard() {
 
       return (data || []) as BookingWithService[];
     },
-    enabled: !!user?.email,
+    enabled: !!user?.id,
     staleTime: 30000, // 30 seconds
     refetchOnWindowFocus: true,
   });
@@ -61,14 +61,37 @@ export default function ClientDashboard() {
   const { data: portfolioImages, isLoading: imagesLoading } = useQuery({
     queryKey: ['client-portfolio', user?.id],
     queryFn: async () => {
-      if (!user?.email) return [];
+      if (!user?.id) return [];
 
       // For now, return empty array - portfolio_images table doesn't have user linkage
       // This can be extended later when portfolio_images table is linked to bookings/users
       return [];
     },
-    enabled: !!user?.email,
+    enabled: !!user?.id,
   });
+
+  const queryClient = useQueryClient();
+
+  const cancelMutation = useMutation({
+    mutationFn: async (bookingId: string) => {
+      const { error } = await supabase
+        .from('bookings')
+        .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+        .eq('id', bookingId)
+        .eq('client_id', user!.id); // בטיחות — רק הלקוח עצמו יכול לבטל
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['client-bookings'] });
+      toast.success('התור בוטל בהצלחה');
+    },
+    onError: () => toast.error('שגיאה בביטול התור'),
+  });
+
+  const handleCancel = (bookingId: string) => {
+    if (!window.confirm('האם אתה בטוח שברצונך לבטל את התור?')) return;
+    cancelMutation.mutate(bookingId);
+  };
 
   const today = startOfDay(new Date());
 
@@ -231,6 +254,13 @@ export default function ClientDashboard() {
                         <span className="text-foreground">₪{Number(booking.total_price).toFixed(0)}</span>
                       </div>
                     </div>
+                    <button
+                      onClick={() => handleCancel(booking.id)}
+                      disabled={cancelMutation.isPending}
+                      className="text-xs text-destructive hover:underline mt-1 disabled:opacity-50"
+                    >
+                      ביטול תור
+                    </button>
                   </motion.div>
                 ))}
               </div>

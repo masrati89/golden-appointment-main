@@ -1,16 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { format, startOfMonth, endOfMonth, addMonths, addDays } from 'date-fns';
+import { format } from 'date-fns';
 
-/**
- * Efficiently fetches booking counts per date for the visible month range.
- * Uses a single query - only fetches booking_date, no full rows.
- * Returns Map of date string (yyyy-MM-dd) -> count of confirmed/pending bookings.
- */
 export function useAvailabilityCounts(
   serviceId: string | null,
   startDate: Date,
   endDate: Date,
+  businessId?: string | null,
 ) {
   return useQuery({
     queryKey: [
@@ -18,12 +14,13 @@ export function useAvailabilityCounts(
       serviceId ?? 'none',
       format(startDate, 'yyyy-MM'),
       format(endDate, 'yyyy-MM'),
+      businessId ?? 'all',
     ],
     queryFn: async () => {
       const startStr = format(startDate, 'yyyy-MM-dd');
       const endStr = format(endDate, 'yyyy-MM-dd');
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('bookings')
         .select('booking_date')
         .gte('booking_date', startStr)
@@ -31,6 +28,9 @@ export function useAvailabilityCounts(
         .in('status', ['confirmed', 'pending'])
         .limit(2000);
 
+      if (businessId) query = query.eq('business_id', businessId);
+
+      const { data, error } = await query;
       if (error) throw error;
 
       const counts: Record<string, number> = {};

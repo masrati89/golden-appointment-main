@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useSettings } from '@/hooks/useSettings';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import { toast } from 'sonner';
-import { Loader2, Save, Settings, CreditCard, Calendar, Bell, Upload, X } from 'lucide-react';
+import { Loader2, Save, Settings, CreditCard, Calendar, Bell, Upload, X, AlertCircle } from 'lucide-react';
 import { GoogleSyncStatus } from '@/components/GoogleSyncStatus';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,6 +18,11 @@ const tabs = [
   { id: 'booking', label: 'הזמנות', icon: Calendar },
   { id: 'notifications', label: 'התראות', icon: Bell },
 ];
+
+function isValidIsraeliPhone(phone: string): boolean {
+  const cleaned = phone.replace(/\D/g, '');
+  return /^(05\d{8}|972\d{9})$/.test(cleaned);
+}
 
 export default function AdminSettings() {
   const queryClient = useQueryClient();
@@ -101,6 +106,9 @@ export default function AdminSettings() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      if (form.whatsapp_admin_phone && !isValidIsraeliPhone(form.whatsapp_admin_phone)) {
+        throw new Error('מספר טלפון WhatsApp לא תקין');
+      }
       const { id } = form;
       if (!id) throw new Error('Missing settings id');
 
@@ -344,6 +352,12 @@ export default function AdminSettings() {
                     dir="ltr" 
                     placeholder="0501234567"
                   />
+                  {form.whatsapp_admin_phone && !isValidIsraeliPhone(form.whatsapp_admin_phone) && (
+                    <p className="text-destructive text-xs mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      פורמט לא תקין — הכנס מספר ישראלי (למשל: 0501234567)
+                    </p>
+                  )}
                   <p className="text-xs text-muted-foreground -mt-3">
                     מספר הטלפון שיקבל התראות על תורים חדשים
                   </p>

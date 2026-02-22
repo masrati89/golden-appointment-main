@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { useSettings } from '@/hooks/useSettings';
 import { downloadICSFile } from '@/lib/calendar';
 import { getHebrewDayName, formatHebrewDate } from '@/lib/dateHelpers';
-import { useBusinessSafe } from '@/contexts/BusinessContext';
 import confetti from 'canvas-confetti';
 
 interface BookingSuccessState {
@@ -26,7 +25,6 @@ const BookingSuccess = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { data: settings } = useSettings();
-  const { business } = useBusinessSafe();
   const confettiFired = useRef(false);
 
   const state = location.state as BookingSuccessState | null;
@@ -94,7 +92,7 @@ const BookingSuccess = () => {
   };
 
   const handleGoHome = () => {
-    navigate(business?.slug ? `/b/${business.slug}` : '/', { replace: true });
+    navigate('/', { replace: true });
   };
 
   return (

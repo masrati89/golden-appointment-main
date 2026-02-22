@@ -2,9 +2,11 @@ import { Home, UserCog, User, LogIn } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '@/hooks/useSettings';
 import { useClientAuth } from '@/contexts/ClientAuthContext';
+import { useBusinessSafe } from '@/contexts/BusinessContext';
 
 const Header = () => {
   const navigate = useNavigate();
+  const { business } = useBusinessSafe();
   const { data: settings } = useSettings();
   const { isAuthenticated, user } = useClientAuth();
   const logoUrl = settings?.business_logo_url;
@@ -26,7 +28,7 @@ const Header = () => {
         {/* Center - Logo/Brand name (perfectly centered) */}
         <div className="flex justify-center">
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate(business?.slug ? `/b/${business.slug}` : '/')}
             className="flex items-center justify-center"
           >
             {logoUrl ? (

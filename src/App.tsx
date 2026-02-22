@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AdminAuthProvider } from "@/contexts/AdminAuthContext";
 import { ClientAuthProvider } from "@/contexts/ClientAuthContext";
 import { BookingProvider } from "@/contexts/BookingContext";
@@ -16,8 +16,6 @@ import { AppLoader } from "@/components/AppLoader";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { RouteTransitionLoader } from "@/components/RouteTransitionLoader";
 import { AmbientBackground } from "@/components/AmbientBackground";
-import Index from "./pages/Index";
-
 // Lazy-loaded routes
 const BusinessPage      = lazy(() => import("./pages/BusinessPage"));
 const BookingVertical   = lazy(() => import("./pages/BookingVertical"));
@@ -40,7 +38,16 @@ const SuperAdminDashboard = lazy(() => import("./pages/super-admin/SuperAdminDas
 const BusinessDetail      = lazy(() => import("./pages/super-admin/BusinessDetail"));
 const NewBusinessForm     = lazy(() => import("./pages/super-admin/NewBusinessForm"));
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 3 * 60 * 1000,      // 3 דקות — נתונים נחשבים טריים
+      gcTime: 30 * 60 * 1000,         // 30 דקות — קאש נשמר בזיכרון
+      retry: 1,                        // ניסיון חוזר אחד בלבד על שגיאה
+      refetchOnWindowFocus: false,     // לא refresh אוטומטי בחזרה לחלון
+    },
+  },
+});
 
 const App = () => (
   <ErrorBoundary>
@@ -84,7 +91,7 @@ const App = () => (
                     } />
 
                     {/* ─── דפים ציבוריים (ישנים — נשמרים לתאימות) ─────── */}
-                    <Route path="/" element={<Index />} />
+                    <Route path="/" element={<Navigate to="/admin/login" replace />} />
                     <Route path="/booking-menu" element={<BookingVertical />} />
                     <Route path="/book/:serviceId" element={<BookingVertical />} />
                     <Route path="/booking-success" element={<BookingSuccess />} />

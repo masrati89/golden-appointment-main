@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAdminAuth } from '@/contexts/AdminAuthContext';
+import { useSettings } from '@/hooks/useSettings';
 import { Plus, Sparkles, Trash2, X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
@@ -30,12 +32,20 @@ const emptyForm: ServiceForm = {
 
 export default function ServicesManagement() {
   const queryClient = useQueryClient();
+  const { user } = useAdminAuth();
+  const { data: settings } = useSettings();
+  const businessId = settings?.business_id ?? null;
   const [editing, setEditing] = useState<ServiceForm | null>(null);
 
   const { data: services } = useQuery({
-    queryKey: ['admin-services'],
+    queryKey: ['admin-services', businessId],
     queryFn: async () => {
-      const { data } = await supabase.from('services').select('*').order('sort_order');
+      if (!businessId) return [];
+      const { data } = await supabase
+        .from('services')
+        .select('*')
+        .eq('business_id', businessId)
+        .order('sort_order');
       return data ?? [];
     },
   });
@@ -62,6 +72,7 @@ export default function ServicesManagement() {
           image_url: form.image_url || null,
           is_active: form.is_active,
           sort_order: form.sort_order,
+          business_id: businessId,
         });
         if (error) throw error;
       }

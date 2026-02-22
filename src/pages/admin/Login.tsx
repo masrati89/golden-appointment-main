@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import { AppLoader } from '@/components/AppLoader';
+import { supabase } from '@/integrations/supabase/client';
 import { Lock, Eye, EyeOff, AlertCircle, Loader2, Mail } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,6 +18,10 @@ export default function AdminLogin() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
   const hasRedirected = useRef(false);
 
   const { login, isAuthenticated, isLoading } = useAdminAuth();
@@ -49,6 +54,22 @@ export default function AdminLogin() {
       }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+        redirectTo: `${window.location.origin}/admin/reset-password`,
+      });
+      if (error) throw error;
+      setForgotSent(true);
+    } catch (err: any) {
+      setError(err.message || 'שגיאה בשליחת המייל');
+    } finally {
+      setForgotLoading(false);
     }
   };
 
@@ -137,9 +158,54 @@ export default function AdminLogin() {
           </button>
         </form>
 
-        <p className="text-center text-sm text-muted-foreground mt-6">
-          אין לך גישה? פנה לבעל העסק
-        </p>
+        {!forgotMode ? (
+          <div className="text-center mt-6 space-y-2">
+            <button
+              type="button"
+              onClick={() => { setForgotMode(true); setError(''); }}
+              className="text-sm text-primary hover:underline"
+            >
+              שכחתי סיסמה
+            </button>
+            <p className="text-sm text-muted-foreground">אין לך גישה? פנה לבעל העסק</p>
+          </div>
+        ) : (
+          <div className="mt-6 space-y-4">
+            {!forgotSent ? (
+              <form onSubmit={handleForgotPassword} className="space-y-3">
+                <p className="text-sm text-center text-muted-foreground">הכנס את האימייל שלך ונשלח לך קישור לאיפוס סיסמה</p>
+                <Input
+                  type="email"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  placeholder="האימייל שלך"
+                  className="h-12 rounded-xl border-2"
+                  dir="ltr"
+                  required
+                />
+                {error && <p className="text-destructive text-sm">{error}</p>}
+                <button
+                  type="submit"
+                  disabled={forgotLoading || !forgotEmail}
+                  className="w-full h-12 rounded-xl bg-primary text-primary-foreground font-bold disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {forgotLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'שלח קישור'}
+                </button>
+                <button type="button" onClick={() => setForgotMode(false)} className="w-full text-sm text-muted-foreground hover:underline">
+                  חזרה להתחברות
+                </button>
+              </form>
+            ) : (
+              <div className="text-center space-y-3">
+                <p className="text-green-600 font-semibold">✅ הקישור נשלח!</p>
+                <p className="text-sm text-muted-foreground">בדוק את תיבת הדואר שלך ולחץ על הקישור לאיפוס הסיסמה</p>
+                <button type="button" onClick={() => { setForgotMode(false); setForgotSent(false); }} className="text-sm text-primary hover:underline">
+                  חזרה להתחברות
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </motion.div>
       <BottomNav />
     </div>

@@ -174,7 +174,7 @@ function BusinessPageContent() {
             >
               {isCheckingAuth ? (
                 <><Loader2 className="w-5 h-5 animate-spin" /><span>בודק...</span></>
-              ) : 'התחילי עכשיו'}
+              ) : 'קביעת תור'}
             </button>
           </motion.div>
 
@@ -203,6 +203,13 @@ function BusinessPageContent() {
         </div>
       </main>
 
+      {/* Admin shortcut — bottom left corner */}
+      <a
+        href="/admin/dashboard"
+        className="fixed top-4 left-4 z-50 text-xs text-muted-foreground/40 hover:text-muted-foreground transition-colors px-2 py-1 rounded-lg hover:bg-black/5"
+      >
+        ניהול
+      </a>
       <FloatingWhatsApp />
     </div>
   );

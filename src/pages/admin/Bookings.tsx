@@ -47,7 +47,7 @@ const paymentLabels: Record<string, string> = {
 export default function BookingsManagement() {
   const queryClient = useQueryClient();
   const { user } = useAdminAuth();
-  const { data: settings } = useSettings(user?.id);
+  const { data: settings } = useSettings();
   const businessId = settings?.business_id ?? null;
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('all');
@@ -235,7 +235,7 @@ export default function BookingsManagement() {
                           className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                           onClick={() => setDeleteDialogBookingId(b.id)}
                           disabled={deleteBooking.isPending}
-                          aria-label="Delete appointment"
+                          aria-label="מחיקת תור"
                         >
                           {deleteBooking.isPending && deleteDialogBookingId === b.id ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -256,13 +256,13 @@ export default function BookingsManagement() {
       <AlertDialog open={!!deleteDialogBookingId} onOpenChange={(open) => !open && setDeleteDialogBookingId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete appointment</AlertDialogTitle>
+            <AlertDialogTitle>מחיקת תור</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this appointment? This action cannot be undone.
+              האם אתה בטוח שברצונך למחוק את התור? פעולה זו אינה ניתנת לביטול.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteBooking.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteBooking.isPending}>ביטול</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();
@@ -274,10 +274,10 @@ export default function BookingsManagement() {
               {deleteBooking.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin ml-2" />
-                  Deleting...
+                  מוחק...
                 </>
               ) : (
-                'Delete'
+                'מחק'
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

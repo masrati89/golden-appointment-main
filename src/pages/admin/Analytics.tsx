@@ -3,14 +3,12 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { format, subDays, startOfWeek, startOfMonth, startOfYear, endOfWeek, endOfMonth, endOfYear, eachDayOfInterval } from 'date-fns';
 import { Calendar, DollarSign, TrendingUp } from 'lucide-react';
-import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import { useSettings } from '@/hooks/useSettings';
 
 type Period = 'week' | 'month' | 'year';
 
 export default function AdminAnalytics() {
-  const { user } = useAdminAuth();
-  const { data: settings } = useSettings(user?.id);
+  const { data: settings } = useSettings();
   const businessId = settings?.business_id ?? null;
   const [period, setPeriod] = useState<Period>('month');
 
