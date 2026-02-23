@@ -217,7 +217,8 @@ function CalendarTimeScreen({
   }, [currentMonth]);
 
   const { data: slots, isLoading: slotsLoading } = useQuery({
-    queryKey: ['slots', serviceId, selectedDate?.toISOString()],
+    // M-5: Include businessId in queryKey to prevent cross-tenant cache pollution.
+    queryKey: ['slots', businessId, serviceId, selectedDate?.toISOString()],
     queryFn: () => getAvailableSlots(selectedDate!, serviceId, supabase, businessId),
     enabled: !!selectedDate && !!serviceId,
   });

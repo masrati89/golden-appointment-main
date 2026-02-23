@@ -21,90 +21,57 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
   const initDone = useRef(false);
 
   useEffect(() => {
-    if (initDone.current) {
-      console.log('[Mobile Debug] ClientAuthContext: Already initialized, skipping');
-      return;
-    }
+    if (initDone.current) return;
     initDone.current = true;
 
-    console.log('[Mobile Debug] ClientAuthContext: Starting initialization');
     let cancelled = false;
 
     const timeoutId = setTimeout(() => {
       if (cancelled) return;
-      console.log('[Mobile Debug] ClientAuthContext: Loading timeout reached');
       setIsLoading(false);
     }, 3000);
 
     async function initSession() {
       try {
-        console.log('[Mobile Debug] ClientAuthContext: Checking session...');
         const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (cancelled) {
-          console.log('[Mobile Debug] ClientAuthContext: Cancelled during session check');
-          return;
-        }
-        
+
+        if (cancelled) return;
+
         if (error) {
-          console.error('[Mobile Debug] ClientAuthContext: Session check error:', error);
+          console.error('ClientAuthContext: Session check error:', error);
           return;
         }
-        
+
         if (session?.user) {
-          console.log('[Mobile Debug] ClientAuthContext: Session found, user:', session.user.email);
           setUser(session.user);
           setIsAuthenticated(true);
-        } else {
-          console.log('[Mobile Debug] ClientAuthContext: No session found');
         }
       } catch (err) {
-        console.error('[Mobile Debug] ClientAuthContext: Exception during initSession:', err);
+        console.error('ClientAuthContext: Exception during initSession:', err);
       } finally {
         if (!cancelled) {
           clearTimeout(timeoutId);
           setIsLoading(false);
-          console.log('[Mobile Debug] ClientAuthContext: Initialization complete');
         }
       }
     }
 
     initSession();
 
-    // Handle magic link callback - will be handled by AuthCallback component
-    // This is just for session initialization
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('[Mobile Debug] ClientAuthContext: Auth state change:', event, session?.user?.email || 'no user');
-      
-      if (event === 'INITIAL_SESSION') {
-        console.log('[Mobile Debug] ClientAuthContext: Ignoring INITIAL_SESSION event');
-        return;
-      }
-      
+      if (event === 'INITIAL_SESSION') return;
+
       if (!session?.user) {
-        // Session ended (logout or expired)
-        console.log('[Mobile Debug] ClientAuthContext: Session ended, clearing state');
         setUser(null);
         setIsAuthenticated(false);
-        // Don't navigate here - let the component handle it
-        // This prevents navigation loops and 404s
         return;
       }
 
-      console.log('[Mobile Debug] ClientAuthContext: Setting authenticated user:', session.user.email);
       setUser(session.user);
       setIsAuthenticated(true);
-
-      // Handle token refresh
-      if (event === 'TOKEN_REFRESHED') {
-        console.log('[Mobile Debug] ClientAuthContext: Token refreshed');
-        // Session refreshed, user stays logged in
-      }
     });
 
     return () => {
-      console.log('[Mobile Debug] ClientAuthContext: Cleaning up');
       cancelled = true;
       clearTimeout(timeoutId);
       subscription.unsubscribe();
@@ -127,7 +94,7 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
     try {
       // Build redirect URL: use provided redirectTo, or default to /auth/callback
       // If redirectTo is provided, append it as a query param so AuthCallback can use it
-      const callbackUrl = redirectTo 
+      const callbackUrl = redirectTo
         ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`
         : `${window.location.origin}/auth/callback`;
 

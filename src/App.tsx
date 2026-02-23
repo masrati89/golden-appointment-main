@@ -90,10 +90,11 @@ const App = () => (
                       </BusinessProvider>
                     } />
 
-                    {/* ─── דפים ציבוריים (ישנים — נשמרים לתאימות) ─────── */}
+                    {/* ─── דפים ציבוריים ─────────────────────────────────── */}
+                    {/* H-1: Legacy routes /booking-menu and /book/:serviceId removed —
+                     *   they rendered BookingVertical without a BusinessProvider,
+                     *   so businessId was always null (no tenant isolation). */}
                     <Route path="/" element={<Navigate to="/admin/login" replace />} />
-                    <Route path="/booking-menu" element={<BookingVertical />} />
-                    <Route path="/book/:serviceId" element={<BookingVertical />} />
                     <Route path="/booking-success" element={<BookingSuccess />} />
 
                     {/* ─── אימות לקוח ─────────────────────────────────── */}

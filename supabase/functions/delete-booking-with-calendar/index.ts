@@ -90,6 +90,24 @@ serve(async (req) => {
   const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, supabaseKey);
 
+  // C-6: Require authenticated admin caller.
+  const authHeader = req.headers.get("Authorization");
+  const token = authHeader?.replace("Bearer ", "");
+  if (!token) {
+    return new Response(
+      JSON.stringify({ success: false, error: "Unauthorized" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  const { data: { user: caller }, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !caller) {
+    return new Response(
+      JSON.stringify({ success: false, error: "Unauthorized" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
   try {
     const { booking_id } = await req.json();
     if (!booking_id) {
@@ -99,9 +117,10 @@ serve(async (req) => {
       );
     }
 
+    // C-6: Fetch business_id along with the booking so we can scope the settings lookup.
     const { data: booking, error: bookingError } = await supabase
       .from("bookings")
-      .select("id, google_calendar_event_id")
+      .select("id, google_calendar_event_id, business_id")
       .eq("id", booking_id)
       .maybeSingle();
 
@@ -115,11 +134,12 @@ serve(async (req) => {
     const googleEventId = booking.google_calendar_event_id;
 
     if (googleEventId) {
+      // C-6: Use correct table name ("settings") and filter by business_id from the booking.
+      // Previously used wrong table "business_settings" with no business_id filter.
       const { data: businessSettings } = await supabase
-        .from("business_settings")
+        .from("settings")
         .select("google_calendar_refresh_token")
-        .not("google_calendar_refresh_token", "is", null)
-        .limit(1)
+        .eq("business_id", booking.business_id)
         .maybeSingle();
 
       const refreshToken = businessSettings?.google_calendar_refresh_token ?? null;

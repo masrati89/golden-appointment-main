@@ -42,10 +42,12 @@ export function GoogleSyncStatus({
       return;
     }
 
+    // H-4: Include timestamp for CSRF validation in the callback.
     const state = btoa(
       JSON.stringify({
         origin: window.location.origin,
-        business_id: user.id,
+        admin_user_id: user.id,
+        ts: Date.now(),
       })
     );
 
@@ -65,10 +67,9 @@ export function GoogleSyncStatus({
     if (!user?.id) return;
     setIsDisconnecting(true);
     try {
-      const { error } = await supabase
-        .from('business_settings')
-        .update({ google_calendar_refresh_token: null, google_calendar_connected: false })
-        .eq('id', user.id);
+      // C-3: Use the RPC which scopes the update to auth.uid() — avoids wrong-table
+      // and missing-filter bugs that previously existed here.
+      const { error } = await supabase.rpc('disconnect_google_calendar');
       if (error) {
         toast.error('Failed to disconnect');
         return;

@@ -186,13 +186,14 @@ function BusinessPageContent() {
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3, delay: 0.6 }}
             >
-              {settings.show_instagram && settings.instagram_url && (
+              {/* M-2: Only render social links that start with https:// to prevent XSS via javascript: URLs */}
+              {settings.show_instagram && settings.instagram_url?.startsWith('https://') && (
                 <a href={settings.instagram_url} target="_blank" rel="noopener noreferrer"
                   className={`glass-card p-3 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 flex items-center justify-center ${bgImageUrl ? 'bg-white/20 hover:bg-white/30' : 'bg-secondary/50 hover:bg-secondary'}`}>
                   <Instagram className={`w-6 h-6 ${bgImageUrl ? 'text-white' : 'text-foreground'}`} />
                 </a>
               )}
-              {settings.show_facebook && settings.facebook_url && (
+              {settings.show_facebook && settings.facebook_url?.startsWith('https://') && (
                 <a href={settings.facebook_url} target="_blank" rel="noopener noreferrer"
                   className={`glass-card p-3 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 flex items-center justify-center ${bgImageUrl ? 'bg-white/20 hover:bg-white/30' : 'bg-secondary/50 hover:bg-secondary'}`}>
                   <Facebook className={`w-6 h-6 ${bgImageUrl ? 'text-white' : 'text-foreground'}`} />

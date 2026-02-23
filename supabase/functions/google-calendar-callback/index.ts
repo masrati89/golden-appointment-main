@@ -22,14 +22,37 @@ serve(async (req) => {
   const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
   const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
 
+  // H-4: Parse base64-JSON state for CSRF validation and admin user identification.
+  // State format: btoa(JSON.stringify({ origin, admin_user_id, ts }))
   let redirectBase: string | null = null;
-  if (state && state.startsWith("http")) {
+  let adminUserId: string | null = null;
+
+  if (state) {
     try {
-      redirectBase = new URL(state).origin;
+      const parsed = JSON.parse(atob(state));
+      if (parsed.origin) {
+        try { redirectBase = new URL(parsed.origin).origin; } catch { /* ignore bad origin */ }
+      }
+      // CSRF: reject state older than 10 minutes
+      if (!parsed.ts || Date.now() - parsed.ts > 10 * 60 * 1000) {
+        console.error("Google OAuth: state timestamp missing or expired (CSRF protection)");
+        const failUrl = redirectBase ? `${redirectBase}/admin/settings?connected=0` : "/admin/settings?connected=0";
+        return Response.redirect(failUrl, 302);
+      }
+      adminUserId = parsed.admin_user_id ?? null;
     } catch {
-      redirectBase = null;
+      // Not base64-JSON — reject (old plain-URL state format is no longer accepted)
+      console.error("Google OAuth: invalid state parameter format");
+      return Response.redirect("/admin/settings?connected=0", 302);
     }
   }
+
+  if (!adminUserId) {
+    console.error("Google OAuth: admin_user_id missing from state");
+    const failUrl = redirectBase ? `${redirectBase}/admin/settings?connected=0` : "/admin/settings?connected=0";
+    return Response.redirect(failUrl, 302);
+  }
+
   const defaultRedirect = redirectBase ? `${redirectBase}/admin/settings?connected=1` : "/admin/settings?connected=1";
   const failRedirect = redirectBase ? `${redirectBase}/admin/settings?connected=0` : "/admin/settings?connected=0";
 
@@ -74,8 +97,10 @@ serve(async (req) => {
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey);
+  // Pass admin_user_id so the RPC updates only the correct tenant's settings row.
   const { error } = await supabase.rpc("set_google_calendar_tokens", {
     p_refresh_token: refreshToken,
+    p_admin_user_id: adminUserId,
   });
 
   if (error) {

@@ -49,6 +49,11 @@ export default function NewBusinessForm() {
 
   const handleSubmit = async () => {
     if (!form.name || !form.slug) return;
+    // L-1: Validate Israeli phone format if provided (05X-XXX-XXXX or 05XXXXXXXX)
+    if (form.phone && !/^0(5\d{8}|[23489]\d{7})$/.test(form.phone.replace(/[-\s]/g, ''))) {
+      alert('מספר טלפון לא תקין — נא להזין מספר ישראלי (לדוגמה: 050-1234567)');
+      return;
+    }
     const biz = await createBusiness.mutateAsync(form);
     navigate(`/super-admin/businesses/${biz.id}`);
   };

@@ -209,8 +209,9 @@ export default function BusinessDetail() {
             <Input type="password" value={newAdminPassword} onChange={(e) => setNewAdminPassword(e.target.value)}
               placeholder="לפחות 8 תווים" className="mt-1 h-10" dir="ltr" />
           </div>
+          {/* M-4: Require at least 8 characters before enabling the create button */}
           <Button className="w-full" onClick={createAdminUser}
-            disabled={!newAdminEmail || !newAdminPassword.length || creatingAdmin}>
+            disabled={!newAdminEmail || newAdminPassword.length < 8 || creatingAdmin}>
             {creatingAdmin
               ? <><Loader2 className="w-4 h-4 animate-spin" />יוצר...</>
               : <><Plus className="w-4 h-4" />צור אדמין</>}

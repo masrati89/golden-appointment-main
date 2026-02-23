@@ -108,7 +108,8 @@ const BookingVertical = () => {
 
   // Slots query
   const { data: slots, isLoading: slotsLoading } = useQuery({
-    queryKey: ['slots', selectedService?.id, selectedDate?.toISOString()],
+    // M-5: Include businessId in queryKey to prevent cross-tenant cache pollution.
+    queryKey: ['slots', businessId, selectedService?.id, selectedDate?.toISOString()],
     queryFn: () => getAvailableSlots(selectedDate!, selectedService!.id, supabase, businessId),
     enabled: !!selectedDate && !!selectedService,
   });
@@ -212,14 +213,17 @@ const BookingVertical = () => {
       if (!formData || !selectedDate || !selectedTime || !selectedService) throw new Error('חסרים פרטים');
       const dateStr = format(selectedDate, 'yyyy-MM-dd');
 
-      let conflictQuery = supabase
+      // M-1: businessId is mandatory — without it the conflict check would span all tenants.
+      if (!businessId) throw new Error('שגיאה: לא ניתן לאמת את פרטי העסק');
+
+      const { data: conflict } = await supabase
         .from('bookings')
         .select('id')
+        .eq('business_id', businessId)
         .eq('booking_date', dateStr)
         .eq('booking_time', selectedTime)
-        .in('status', ['confirmed', 'pending']);
-      if (businessId) conflictQuery = conflictQuery.eq('business_id', businessId);
-      const { data: conflict } = await conflictQuery.maybeSingle();
+        .in('status', ['confirmed', 'pending'])
+        .maybeSingle();
 
       if (conflict) throw new Error('השעה נתפסה, אנא בחר שעה אחרת');
 

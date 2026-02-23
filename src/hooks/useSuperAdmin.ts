@@ -62,12 +62,11 @@ export function useSuperAdminOverview() {
     staleTime: 60 * 1000,           // רענן כל דקה
     refetchInterval: 60 * 1000,
     queryFn: async (): Promise<SuperAdminOverview> => {
-      const { data, error } = await supabase
-        .from('super_admin_overview')
-        .select('*')
-        .single();
+      // C-8: Access via SECURITY DEFINER RPC (enforces super_admin role server-side)
+      // instead of querying the view directly (which bypasses RLS).
+      const { data, error } = await supabase.rpc('get_super_admin_overview');
       if (error) throw error;
-      return data as SuperAdminOverview;
+      return data as unknown as SuperAdminOverview;
     },
   });
 }
