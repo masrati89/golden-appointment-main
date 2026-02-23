@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Calendar, Clock, Sparkles, Tag, Download, Home, CheckCircle } from 'lucide-react';
-import { format } from 'date-fns';
+import { Calendar, Sparkles, Tag, Download, Home, CheckCircle, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSettings } from '@/hooks/useSettings';
+import { useClientAuth } from '@/contexts/ClientAuthContext';
+import { useBusinessSafe } from '@/contexts/BusinessContext';
 import { downloadICSFile } from '@/lib/calendar';
 import { getHebrewDayName, formatHebrewDate } from '@/lib/dateHelpers';
 import confetti from 'canvas-confetti';
@@ -24,7 +25,9 @@ interface BookingSuccessState {
 const BookingSuccess = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { data: settings } = useSettings();
+  const { isAuthenticated } = useClientAuth();
+  const { business, businessId } = useBusinessSafe();
+  const { data: settings } = useSettings(businessId);
   const confettiFired = useRef(false);
 
   const state = location.state as BookingSuccessState | null;
@@ -200,6 +203,38 @@ const BookingSuccess = () => {
           </ul>
         </motion.div>
       </div>
+
+      {/* Loyalty CTA — shown only for guest (unauthenticated) users */}
+      {!isAuthenticated && business?.slug && (
+        <motion.div
+          className="glass-card p-3 w-full border border-primary/25 bg-primary/5 flex items-center justify-between gap-3 flex-shrink-0 mt-2 sm:mt-3"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1.0 }}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Heart className="w-4 h-4 text-primary flex-shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-foreground">צבר נקודות נאמנות</p>
+              <p className="text-[10px] text-muted-foreground leading-tight">הרשם כדי לצבור נקודות על כל תור מאושר</p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs whitespace-nowrap border-primary text-primary hover:bg-primary/10 flex-shrink-0"
+            onClick={() =>
+              navigate(
+                `/auth/login?next=${encodeURIComponent(
+                  `/register/customer?next=${encodeURIComponent(`/b/${business.slug}/loyalty`)}`
+                )}`
+              )
+            }
+          >
+            הרשם
+          </Button>
+        </motion.div>
+      )}
 
       {/* Bottom: buttons — safe area so not cut on iPhone */}
       <motion.div

@@ -30,6 +30,10 @@ const AdminServices     = lazy(() => import("./pages/admin/Services"));
 const AdminSettings     = lazy(() => import("./pages/admin/Settings"));
 const AdminAnalytics    = lazy(() => import("./pages/admin/Analytics"));
 const BlockedSlots      = lazy(() => import("./pages/admin/BlockedSlots"));
+const AdminLoyalty      = lazy(() => import("./pages/admin/Loyalty"));
+const LoyaltyPage       = lazy(() => import("./pages/LoyaltyPage"));
+const CustomerRegister  = lazy(() => import("./pages/CustomerRegister"));
+const LandingPage       = lazy(() => import("./pages/LandingPage"));
 const ClientLogin       = lazy(() => import("./pages/auth/ClientLogin"));
 const AuthError         = lazy(() => import("./pages/auth/AuthError"));
 const AuthCallback      = lazy(() => import("./pages/auth/AuthCallback"));
@@ -89,12 +93,17 @@ const App = () => (
                         <BookingSuccess />
                       </BusinessProvider>
                     } />
+                    <Route path="/b/:slug/loyalty" element={
+                      <BusinessProvider>
+                        <LoyaltyPage />
+                      </BusinessProvider>
+                    } />
 
                     {/* ─── דפים ציבוריים ─────────────────────────────────── */}
                     {/* H-1: Legacy routes /booking-menu and /book/:serviceId removed —
                      *   they rendered BookingVertical without a BusinessProvider,
                      *   so businessId was always null (no tenant isolation). */}
-                    <Route path="/" element={<Navigate to="/admin/login" replace />} />
+                    <Route path="/" element={<LandingPage />} />
                     <Route path="/booking-success" element={<BookingSuccess />} />
 
                     {/* ─── אימות לקוח ─────────────────────────────────── */}
@@ -102,6 +111,11 @@ const App = () => (
                     <Route path="/auth/login" element={<ClientLogin />} />
                     <Route path="/auth/error" element={<AuthError />} />
                     <Route path="/auth/callback" element={<AuthCallback />} />
+
+                    {/* ─── הרשמת לקוח — נדרש אחרי magic-link auth ────── */}
+                    <Route path="/register/customer" element={
+                      <ClientProtectedRoute><CustomerRegister /></ClientProtectedRoute>
+                    } />
 
                     {/* ─── לקוח מחובר ─────────────────────────────────── */}
                     <Route path="/my-bookings" element={
@@ -122,6 +136,7 @@ const App = () => (
                       <Route path="settings"   element={<AdminSettings />} />
                       <Route path="analytics"  element={<AdminAnalytics />} />
                       <Route path="blocked"    element={<BlockedSlots />} />
+                      <Route path="loyalty"    element={<AdminLoyalty />} />
                     </Route>
 
                     <Route

@@ -10,6 +10,7 @@ import {
   BarChart3,
   LogOut,
   Ban,
+  Heart,
   MoreHorizontal,
   Home,
 } from 'lucide-react';
@@ -21,6 +22,7 @@ const navItems = [
   { icon: Ban, label: 'חסימות', path: '/admin/blocked' },
   { icon: Settings, label: 'הגדרות', path: '/admin/settings' },
   { icon: BarChart3, label: 'דוחות', path: '/admin/analytics' },
+  { icon: Heart,    label: 'נאמנות', path: '/admin/loyalty' },
 ];
 
 // Bottom nav shows first 4 items + "more" toggle for the rest

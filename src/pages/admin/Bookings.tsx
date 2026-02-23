@@ -112,8 +112,11 @@ export default function BookingsManagement() {
 
   const deleteBooking = useMutation({
     mutationFn: async (booking_id: string) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('לא מחובר — נסה להתחבר מחדש');
       const { data, error } = await supabase.functions.invoke('delete-booking-with-calendar', {
         body: { booking_id },
+        headers: { Authorization: `Bearer ${session.access_token}` },
       });
       if (error) throw error;
       if (!data?.success) {
