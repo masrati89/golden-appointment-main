@@ -3,17 +3,19 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { format, subDays, startOfWeek, startOfMonth, startOfYear, endOfWeek, endOfMonth, endOfYear, eachDayOfInterval } from 'date-fns';
 import { Calendar, DollarSign, TrendingUp } from 'lucide-react';
-import { useSettings } from '@/hooks/useSettings';
+import { useAdminAuth } from '@/contexts/AdminAuthContext';
 
 type Period = 'week' | 'month' | 'year';
 
 export default function AdminAnalytics() {
-  const { data: settings } = useSettings();
-  const businessId = settings?.business_id ?? null;
+  // businessId is sourced from auth context (loaded once at login) — single source of truth.
+  const { businessId } = useAdminAuth();
   const [period, setPeriod] = useState<Period>('month');
 
   const { data: stats } = useQuery({
     queryKey: ['admin-analytics', period, businessId],
+    // Only execute once we have a verified businessId — prevents cross-tenant data fetch
+    enabled: !!businessId,
     queryFn: async () => {
       const startDate =
         period === 'week'
@@ -27,15 +29,15 @@ export default function AdminAnalytics() {
         : period === 'month'
           ? format(endOfMonth(new Date()), 'yyyy-MM-dd')
           : format(endOfYear(new Date()), 'yyyy-MM-dd');
-      let bookingsQuery = supabase
+
+      const { data: bookings } = await supabase
         .from('bookings')
         .select('booking_date, total_price, status, payment_method, services:service_id(name)')
+        .eq('business_id', businessId!)
         .gte('booking_date', startDate)
         .lte('booking_date', endDate)
         .order('booking_date')
         .limit(2000);
-      if (businessId) bookingsQuery = bookingsQuery.eq('business_id', businessId);
-      const { data: bookings } = await bookingsQuery;
 
       if (!bookings) return null;
 

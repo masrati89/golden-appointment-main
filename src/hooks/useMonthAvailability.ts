@@ -11,19 +11,21 @@ export function useMonthAvailability(currentMonth: Date, businessId?: string | n
   const endStr = format(end, 'yyyy-MM-dd');
 
   return useQuery({
-    queryKey: ['month-availability', format(currentMonth, 'yyyy-MM'), businessId ?? 'all'],
+    queryKey: ['month-availability', format(currentMonth, 'yyyy-MM'), businessId ?? 'none'],
     queryFn: async (): Promise<string[]> => {
-      let query = supabase
+      // Security guard: businessId is mandatory for tenant isolation.
+      // Without it we cannot scope the query to a single tenant — return empty instead of leaking cross-tenant data.
+      if (!businessId) return [];
+
+      const { data, error } = await supabase
         .from('bookings')
         .select('booking_date')
+        .eq('business_id', businessId)
         .gte('booking_date', startStr)
         .lte('booking_date', endStr)
         .in('status', ['confirmed', 'pending'])
         .limit(500);
 
-      if (businessId) query = query.eq('business_id', businessId);
-
-      const { data, error } = await query;
       if (error) throw error;
 
       const countByDate: Record<string, number> = {};
@@ -36,7 +38,8 @@ export function useMonthAvailability(currentMonth: Date, businessId?: string | n
         .filter(([, count]) => count >= MAX_DAILY_APPOINTMENTS)
         .map(([dateStr]) => dateStr);
     },
-    enabled: true,
+    // Only run when we have a valid businessId — prevents unauthenticated cross-tenant queries
+    enabled: !!businessId,
     staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
   });

@@ -30,23 +30,25 @@ function StatCard({
 export default function AdminDashboard() {
   const today = format(new Date(), 'yyyy-MM-dd');
   const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
-  const { user } = useAdminAuth();
-  const { data: settings } = useSettings();
-  const businessId = settings?.business_id ?? null;
+  // businessId is sourced from auth context (loaded once at login) — single source of truth.
+  // Do NOT derive from useSettings() to avoid a timing gap where businessId is null
+  // for the first render while settings are still loading.
+  const { user, businessId } = useAdminAuth();
+  const { data: settings } = useSettings(businessId);
 
   const { data: todayBookings } = useQuery({
     queryKey: ['admin-today-bookings', businessId],
+    // Only execute once we have a verified businessId — prevents cross-tenant data fetch
     enabled: !!businessId,
     queryFn: async () => {
-      let query = supabase
+      const { data } = await supabase
         .from('bookings')
         .select('*, services:service_id(name)')
+        .eq('business_id', businessId!)
         .eq('booking_date', today)
         .in('status', ['confirmed', 'pending'])
         .order('booking_time')
         .limit(100);
-      if (businessId) query = query.eq('business_id', businessId);
-      const { data } = await query;
       return data ?? [];
     },
   });
@@ -54,17 +56,17 @@ export default function AdminDashboard() {
   const monthEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd');
   const { data: monthStats } = useQuery({
     queryKey: ['admin-month-stats', businessId],
+    // Only execute once we have a verified businessId — prevents cross-tenant data fetch
     enabled: !!businessId,
     queryFn: async () => {
-      let query = supabase
+      const { data } = await supabase
         .from('bookings')
         .select('total_price, customer_phone')
+        .eq('business_id', businessId!)
         .gte('booking_date', monthStart)
         .lte('booking_date', monthEnd)
         .in('status', ['confirmed', 'pending', 'completed'])
         .limit(2000);
-      if (businessId) query = query.eq('business_id', businessId);
-      const { data } = await query;
       const revenue = data?.reduce((sum, b) => sum + Number(b.total_price || 0), 0) ?? 0;
       const uniqueCustomers = new Set(data?.map((b) => b.customer_phone)).size;
       return { revenue, customers: uniqueCustomers, total: data?.length ?? 0 };

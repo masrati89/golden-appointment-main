@@ -8,7 +8,6 @@ import { formatHebrewDate } from '@/lib/dateHelpers';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
-import { useSettings } from '@/hooks/useSettings';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,9 +45,7 @@ const paymentLabels: Record<string, string> = {
 
 export default function BookingsManagement() {
   const queryClient = useQueryClient();
-  const { user } = useAdminAuth();
-  const { data: settings } = useSettings();
-  const businessId = settings?.business_id ?? null;
+  const { user, businessId } = useAdminAuth();
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -56,14 +53,19 @@ export default function BookingsManagement() {
 
   const { data: bookings, isLoading } = useQuery({
     queryKey: ['admin-bookings', statusFilter, dateFilter, businessId],
+    // Only execute once we have a verified businessId — prevents cross-tenant data fetch
+    enabled: !!businessId,
     queryFn: async () => {
+      // Security guard: do not run the query until we have a verified businessId from auth context
+      if (!businessId) return [];
+
       let query = supabase
         .from('bookings')
         .select('*, services:service_id(name)')
+        .eq('business_id', businessId)
         .order('booking_date', { ascending: false })
         .order('booking_time', { ascending: false })
         .limit(200);
-      if (businessId) query = query.eq('business_id', businessId);
 
       if (statusFilter !== 'all') query = query.eq('status', statusFilter);
 
@@ -86,15 +88,24 @@ export default function BookingsManagement() {
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      // Security guard: always scope the update to the admin's own business.
+      // Without this, an admin could modify any booking in the database by UUID alone.
+      if (!businessId) throw new Error('לא ניתן לעדכן: מזהה עסק חסר');
+
       const updateData: any = { status };
       if (status === 'cancelled') {
         updateData.cancelled_at = new Date().toISOString();
       }
-      const { error } = await supabase.from('bookings').update(updateData).eq('id', id);
+      const { error } = await supabase
+        .from('bookings')
+        .update(updateData)
+        .eq('id', id)
+        .eq('business_id', businessId);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-bookings'] });
+      // Scope invalidation to own business — prevents clearing another tenant's cache
+      queryClient.invalidateQueries({ queryKey: ['admin-bookings', statusFilter, dateFilter, businessId] });
       toast.success('הסטטוס עודכן');
     },
   });

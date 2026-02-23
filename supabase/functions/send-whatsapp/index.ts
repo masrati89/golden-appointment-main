@@ -86,6 +86,9 @@ serve(async (req) => {
   try {
     const { booking, service, business_id } = await req.json();
 
+    // Security guard: all three fields are mandatory.
+    // business_id is required for strict tenant isolation — we must never fall back
+    // to querying settings without knowing which business this notification belongs to.
     if (!booking || !service) {
       return new Response(
         JSON.stringify({ success: false, error: "Missing booking or service data" }),
@@ -93,8 +96,17 @@ serve(async (req) => {
       );
     }
 
-    // ─── שלוף הכל מ-settings לפי business_id ─────────────────
-    let query = supabase
+    if (!business_id) {
+      console.error('[WhatsApp] Rejected: business_id is required but was not provided');
+      return new Response(
+        JSON.stringify({ success: false, error: "business_id is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ─── שלוף הכל מ-settings לפי business_id בלבד ────────────
+    console.log(`[WhatsApp] business_id: ${business_id}`);
+    const { data: s, error: sError } = await supabase
       .from("settings")
       .select(`
         whatsapp_enabled,
@@ -106,16 +118,9 @@ serve(async (req) => {
         whatsapp_client_confirmation_template,
         admin_phone,
         business_name
-      `);
-
-    if (business_id) {
-      query = query.eq('business_id', business_id);
-      console.log(`[WhatsApp] business_id: ${business_id}`);
-    } else {
-      console.warn('[WhatsApp] No business_id — using first row fallback');
-    }
-
-    const { data: s, error: sError } = await query.limit(1).maybeSingle();
+      `)
+      .eq('business_id', business_id)
+      .maybeSingle();
 
     if (sError) {
       console.error("Error fetching settings:", sError);

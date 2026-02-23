@@ -58,7 +58,7 @@ serve(async (req) => {
       );
     }
 
-    // 3. קשר אותו לעסק — צור שורת settings אם לא קיימת
+    // 3. קשר אותו לעסק — צור שורת settings אם לא קיימת, ועדכן admin_user_id תמיד
     const { data: existingSettings } = await supabase
       .from("settings")
       .select("id")
@@ -77,7 +77,14 @@ serve(async (req) => {
         business_id,
         business_name: business?.name || "עסק חדש",
         business_phone: business?.phone || null,
+        admin_user_id: userId,
       });
+    } else {
+      // settings קיים — עדכן admin_user_id למשתמש החדש
+      await supabase
+        .from("settings")
+        .update({ admin_user_id: userId })
+        .eq("business_id", business_id);
     }
 
     console.log(`[create-admin-user] Created admin ${email} for business ${business_id}`);

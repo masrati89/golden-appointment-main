@@ -26,8 +26,9 @@ function isValidIsraeliPhone(phone: string): boolean {
 
 export default function AdminSettings() {
   const queryClient = useQueryClient();
-  const { user } = useAdminAuth();
-  const { data: settings, isLoading } = useSettings();
+  // businessId is sourced from auth context (loaded once at login) — single source of truth.
+  const { user, businessId } = useAdminAuth();
+  const { data: settings, isLoading } = useSettings(businessId);
   const [form, setForm] = useState<Record<string, any>>({});
   const [activeTab, setActiveTab] = useState('general');
 
@@ -56,7 +57,7 @@ export default function AdminSettings() {
       window.history.replaceState({}, '', window.location.pathname);
       (async () => {
         try {
-          await queryClient.invalidateQueries({ queryKey: ['settings'] });
+          await queryClient.invalidateQueries({ queryKey: ['settings', businessId] });
         } catch (e) {
           if (mounted.current) console.warn('OAuth callback: settings refetch failed', e);
         }
@@ -75,7 +76,7 @@ export default function AdminSettings() {
 
     (async () => {
       try {
-        await queryClient.invalidateQueries({ queryKey: ['settings'] });
+        await queryClient.invalidateQueries({ queryKey: ['settings', businessId] });
       } catch (e) {
         if (mounted.current) console.warn('OAuth callback: settings refetch failed', e);
       }
@@ -84,7 +85,9 @@ export default function AdminSettings() {
     return () => { mounted.current = false; };
   }, [queryClient]);
 
-  // business_settings columns (single source of truth; no settings table)
+  // רשימת העמודות שנשמרות בלחיצת "שמור הגדרות".
+  // stripe_secret_key מוחרג מכאן בכוונה — הוא מנוהל בנפרד
+  // דרך SecretKeyField שמטפל בו באופן מבודד ומאובטח.
   const SETTINGS_COLUMNS = [
     'id', 'admin_phone', 'admin_calendar_email', 'background_image_url', 'bank_account', 'bank_branch', 'bank_name',
     'bit_business_name', 'bit_payment_url', 'bit_phone_number', 'business_address',
@@ -93,7 +96,8 @@ export default function AdminSettings() {
     'min_advance_hours', 'payment_bank_enabled', 'payment_bit_enabled', 'payment_cash_enabled',
     'payment_credit_enabled', 'payment_stripe_enabled', 'primary_color', 'secondary_color',
     'send_confirmation_sms', 'send_reminder_hours', 'slot_duration_min', 'stripe_publishable_key',
-    'stripe_secret_key', 'whatsapp_api_token', 'whatsapp_float_number', 'working_days',
+    // stripe_secret_key מוחרג — לא נשלח לדפדפן, מטופל ב-SecretKeyField בנפרד
+    'whatsapp_api_token', 'whatsapp_float_number', 'working_days',
     'working_hours_end', 'working_hours_start',
     'instagram_url', 'facebook_url', 'show_instagram', 'show_facebook',
     'whatsapp_enabled',
@@ -127,7 +131,8 @@ export default function AdminSettings() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settings'] });
+      // Include businessId in invalidation key — prevents clearing another tenant's cache
+      queryClient.invalidateQueries({ queryKey: ['settings', businessId] });
       toast.success('ההגדרות נשמרו בהצלחה');
     },
     onError: (error: any) => {
@@ -248,8 +253,11 @@ export default function AdminSettings() {
               <Section title="פרטי Stripe">
                 <Field label="Publishable Key" value={form.stripe_publishable_key} onChange={(v) => update('stripe_publishable_key', v)} dir="ltr" type="password" />
                 <p className="text-xs text-muted-foreground">המפתח הציבורי מ-Stripe Dashboard. מתחיל ב-pk_</p>
-                <Field label="Secret Key" value={form.stripe_secret_key} onChange={(v) => update('stripe_secret_key', v)} dir="ltr" type="password" />
-                <p className="text-xs text-muted-foreground">המפתח הסודי מ-Stripe Dashboard. מתחיל ב-sk_. שמור בסוד!</p>
+                {/* SecretKeyField — מנהל את stripe_secret_key באופן מבודד ומאובטח:
+                    1. לא מציג את הערך הקיים (גם אם נשמר בעבר)
+                    2. שומר ישירות למסד הנתונים רק כשהמשתמש מקיש ערך חדש ולוחץ "שמור"
+                    3. לעולם לא עובר דרך ה-form state שמגיע לדפדפן */}
+                <SecretKeyField settingsId={form.id} />
                 <p className="text-xs text-muted-foreground mt-2">
                   <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
                     קבל מפתחות מ-Stripe Dashboard →
@@ -305,7 +313,7 @@ export default function AdminSettings() {
                 user={user ?? null}
                 isLoading={isLoading && !settings}
                 onDisconnected={() => setForm((f) => ({ ...f, google_calendar_connected: false }))}
-                invalidateSettings={() => queryClient.invalidateQueries({ queryKey: ['settings'] })}
+                invalidateSettings={() => queryClient.invalidateQueries({ queryKey: ['settings', businessId] })}
               />
             </div>
 
@@ -502,7 +510,9 @@ function LogoUploadField({ value, onChange }: { value: string; onChange: (v: str
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const queryClient = useQueryClient();
-  const { data: settings } = useSettings();
+  // Source businessId from auth context to ensure correct tenant scoping
+  const { businessId } = useAdminAuth();
+  const { data: settings } = useSettings(businessId);
 
   const handleUpload = async (file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -545,22 +555,18 @@ function LogoUploadField({ value, onChange }: { value: string; onChange: (v: str
       // Update form state
       onChange(publicUrl);
       
-      // Immediately update database
+      // Immediately update database — use 'settings' (correct table) scoped to own business
       if (settings?.id) {
         const { error: updateError } = await supabase
-          .from('business_settings')
+          .from('settings')
           .update({ business_logo_url: publicUrl })
-          .eq('id', settings.id);
+          .eq('id', settings.id)
+          .eq('business_id', businessId!);
         if (updateError) {
-          console.error('Database update error:', {
-            message: updateError.message,
-            statusCode: updateError.statusCode,
-            error: updateError.error,
-            details: updateError,
-          });
+          console.error('Logo DB update error:', updateError.message);
           toast.warning('הלוגו הועלה אך לא עודכן במסד הנתונים. אנא שמור הגדרות ידנית.');
         } else {
-          queryClient.invalidateQueries({ queryKey: ['settings'] });
+          queryClient.invalidateQueries({ queryKey: ['settings', businessId] });
         }
       }
 
@@ -621,7 +627,9 @@ function BackgroundImageUploadField({ value, onChange }: { value: string; onChan
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const queryClient = useQueryClient();
-  const { data: settings } = useSettings();
+  // Source businessId from auth context to ensure correct tenant scoping
+  const { businessId } = useAdminAuth();
+  const { data: settings } = useSettings(businessId);
 
   const handleUpload = async (file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -664,22 +672,18 @@ function BackgroundImageUploadField({ value, onChange }: { value: string; onChan
       // Update form state
       onChange(publicUrl);
       
-      // Immediately update database
+      // Immediately update database — use 'settings' (correct table) scoped to own business
       if (settings?.id) {
         const { error: updateError } = await supabase
-          .from('business_settings')
+          .from('settings')
           .update({ background_image_url: publicUrl })
-          .eq('id', settings.id);
+          .eq('id', settings.id)
+          .eq('business_id', businessId!);
         if (updateError) {
-          console.error('Database update error:', {
-            message: updateError.message,
-            statusCode: updateError.statusCode,
-            error: updateError.error,
-            details: updateError,
-          });
+          console.error('Background image DB update error:', updateError.message);
           toast.warning('תמונת הרקע הועלתה אך לא עודכנה במסד הנתונים. אנא שמור הגדרות ידנית.');
         } else {
-          queryClient.invalidateQueries({ queryKey: ['settings'] });
+          queryClient.invalidateQueries({ queryKey: ['settings', businessId] });
         }
       }
 
@@ -734,6 +738,84 @@ function BackgroundImageUploadField({ value, onChange }: { value: string; onChan
           {value ? 'החלף תמונה' : 'העלה תמונת רקע'}
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * SecretKeyField
+ * --------------
+ * קומפוננטה מבודדת לניהול stripe_secret_key.
+ *
+ * עקרונות האבטחה שמיושמים כאן:
+ *   1. הערך הקיים לעולם לא נשלח לדפדפן — השדה תמיד מתחיל ריק.
+ *      במקומו מוצג placeholder שמסמן "הזן מפתח חדש".
+ *   2. השמירה נעשית ישירות למסד הנתונים — עוקפת את ה-form הכללי
+ *      כדי שהמפתח לא יגיע לשום state אחר.
+ *   3. ה-update כולל .eq('id', settingsId) — הגנה כפולה שמבטיחה
+ *      שרק הרשומה הנכונה תתעדכן.
+ *   4. לאחר שמירה מוצלחת — השדה מתרוקן מחדש (לא נשמר ב-state).
+ */
+function SecretKeyField({ settingsId }: { settingsId: string | undefined }) {
+  const [newKey, setNewKey] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = async () => {
+    // ולידציה בסיסית: מפתח Stripe Secret חייב להתחיל ב-sk_
+    if (!newKey.startsWith('sk_')) {
+      toast.error('Secret Key לא תקין — חייב להתחיל ב-sk_');
+      return;
+    }
+    if (!settingsId) {
+      toast.error('לא ניתן לשמור: settings ID חסר');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from('settings')
+        .update({ stripe_secret_key: newKey })
+        .eq('id', settingsId);
+
+      if (error) throw error;
+
+      toast.success('Secret Key עודכן בהצלחה');
+      setNewKey(''); // ניקוי מיידי — לא שומרים בזיכרון יותר מהנדרש
+    } catch (err: any) {
+      console.error('[SecretKeyField] Save error:', err);
+      toast.error(`שגיאה בשמירת Secret Key: ${err?.message ?? 'שגיאה לא ידועה'}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label className="text-sm font-semibold">Secret Key</Label>
+      <div className="flex gap-2">
+        <Input
+          type="password"
+          value={newKey}
+          onChange={(e) => setNewKey(e.target.value)}
+          placeholder="הזן מפתח חדש (מתחיל ב-sk_)..."
+          className="h-10 rounded-xl flex-1"
+          dir="ltr"
+          autoComplete="off"
+        />
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={isSaving || !newKey}
+          className="h-10 px-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-semibold transition-all disabled:opacity-50 flex items-center gap-2 text-sm whitespace-nowrap"
+        >
+          {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          שמור מפתח
+        </button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        🔒 המפתח הסודי נשמר ישירות ולעולם אינו מוצג מחדש. השאר ריק אם אינך רוצה לשנות.
+      </p>
     </div>
   );
 }

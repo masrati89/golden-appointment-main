@@ -14,23 +14,25 @@ export function useAvailabilityCounts(
       serviceId ?? 'none',
       format(startDate, 'yyyy-MM'),
       format(endDate, 'yyyy-MM'),
-      businessId ?? 'all',
+      businessId ?? 'none',
     ],
     queryFn: async () => {
+      // Security guard: businessId is mandatory for tenant isolation.
+      // Without it we cannot scope the query to a single tenant — return empty instead of leaking cross-tenant data.
+      if (!businessId) return {} as Record<string, number>;
+
       const startStr = format(startDate, 'yyyy-MM-dd');
       const endStr = format(endDate, 'yyyy-MM-dd');
 
-      let query = supabase
+      const { data, error } = await supabase
         .from('bookings')
         .select('booking_date')
+        .eq('business_id', businessId)
         .gte('booking_date', startStr)
         .lte('booking_date', endStr)
         .in('status', ['confirmed', 'pending'])
         .limit(2000);
 
-      if (businessId) query = query.eq('business_id', businessId);
-
-      const { data, error } = await query;
       if (error) throw error;
 
       const counts: Record<string, number> = {};
@@ -40,7 +42,8 @@ export function useAvailabilityCounts(
       }
       return counts;
     },
-    enabled: !!serviceId,
+    // Only run when we have both a serviceId and a valid businessId
+    enabled: !!serviceId && !!businessId,
     staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
   });

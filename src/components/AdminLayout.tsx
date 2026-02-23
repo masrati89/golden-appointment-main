@@ -1,7 +1,5 @@
 import { useState, useRef, useLayoutEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import { useSettings } from '@/hooks/useSettings';
 import {
@@ -30,24 +28,13 @@ const bottomNavItems = navItems.slice(0, 4);
 const moreNavItems = navItems.slice(4);
 
 export default function AdminLayout() {
-  const { logout, user } = useAdminAuth();
+  const { logout, businessSlug, businessId } = useAdminAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const mainRef = useRef<HTMLElement>(null);
-  const { data: settings } = useSettings();
-  const { data: businessSlug } = useQuery({
-    queryKey: ['business-slug', settings?.business_id],
-    enabled: !!settings?.business_id,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('businesses')
-        .select('slug')
-        .eq('id', settings!.business_id)
-        .single();
-      return data?.slug ?? null;
-    },
-  });
+  const { data: settings } = useSettings(businessId);
 
+  // businessSlug is loaded atomically at login via AdminAuthContext — no timing gap.
   const homePath = businessSlug ? `/b/${businessSlug}` : '/';
   const [moreOpen, setMoreOpen] = useState(false);
 

@@ -8,13 +8,11 @@ import { formatHebrewDate } from '@/lib/dateHelpers';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
-import { useSettings } from '@/hooks/useSettings';
 
 export default function BlockedSlotsPage() {
   const queryClient = useQueryClient();
-  const { user } = useAdminAuth();
-  const { data: settings } = useSettings();
-  const businessId = settings?.business_id ?? null;
+  // businessId is sourced from auth context (loaded once at login) — single source of truth.
+  const { user, businessId } = useAdminAuth();
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({
     date: format(new Date(), 'yyyy-MM-dd'),
@@ -25,32 +23,35 @@ export default function BlockedSlotsPage() {
 
   const { data: blockedSlots } = useQuery({
     queryKey: ['blocked-slots', businessId],
+    // Only execute once we have a verified businessId — prevents cross-tenant data fetch
+    enabled: !!businessId,
     queryFn: async () => {
-      let query = supabase
+      const { data } = await supabase
         .from('blocked_slots')
         .select('*')
+        .eq('business_id', businessId!)
         .gte('blocked_date', format(new Date(), 'yyyy-MM-dd'))
         .order('blocked_date')
         .order('start_time');
-      if (businessId) query = query.eq('business_id', businessId);
-      const { data } = await query;
       return data ?? [];
     },
   });
 
   const blockMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
+      // Security guard: business_id must be present before any write operation
+      if (!businessId) throw new Error('שגיאה: מזהה עסק חסר');
       if (data.startTime >= data.endTime) throw new Error('שעת סיום חייבת להיות אחרי שעת התחלה');
-      // בדוק אם יש תורים קיימים בטווח הזמן הזה
-      let conflictQuery = supabase
+
+      // Check for existing bookings in this time range — scoped to own business only
+      const { data: conflicts } = await supabase
         .from('bookings')
         .select('id, customer_name, booking_time')
+        .eq('business_id', businessId)
         .eq('booking_date', data.date)
         .in('status', ['confirmed', 'pending'])
         .gte('booking_time', data.startTime)
         .lt('booking_time', data.endTime);
-      if (businessId) conflictQuery = conflictQuery.eq('business_id', businessId);
-      const { data: conflicts } = await conflictQuery;
 
       if (conflicts && conflicts.length > 0) {
         const names = conflicts.map((b) => `${b.customer_name} (${b.booking_time})`).join(', ');
@@ -66,7 +67,8 @@ export default function BlockedSlotsPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['blocked-slots'] });
+      // Include businessId in invalidation key — prevents clearing another tenant's cache
+      queryClient.invalidateQueries({ queryKey: ['blocked-slots', businessId] });
       setShowModal(false);
       setFormData({ date: format(new Date(), 'yyyy-MM-dd'), startTime: '09:00', endTime: '18:00', reason: '' });
       toast.success('הזמן נחסם בהצלחה');
@@ -76,11 +78,18 @@ export default function BlockedSlotsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('blocked_slots').delete().eq('id', id);
+      // Security guard: scope DELETE to own business_id to prevent cross-tenant deletion
+      if (!businessId) throw new Error('שגיאה: מזהה עסק חסר');
+      const { error } = await supabase
+        .from('blocked_slots')
+        .delete()
+        .eq('id', id)
+        .eq('business_id', businessId);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['blocked-slots'] });
+      // Include businessId in invalidation key — prevents clearing another tenant's cache
+      queryClient.invalidateQueries({ queryKey: ['blocked-slots', businessId] });
       toast.success('החסימה הוסרה');
     },
   });

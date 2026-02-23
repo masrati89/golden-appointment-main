@@ -141,16 +141,37 @@ serve(async (req) => {
       );
     }
 
-    // Fetch refresh_token from business_settings
+    // Step 1: Resolve the business_id that owns this booking.
+    // We look it up from the bookings table using the booking_id supplied by the caller.
+    // This is the only safe way to ensure we always fetch the correct tenant's credentials —
+    // never rely on a .limit(1) query without a business_id filter.
+    const { data: bookingRow, error: bookingLookupError } = await supabase
+      .from("bookings")
+      .select("business_id")
+      .eq("id", booking_id)
+      .single();
+
+    if (bookingLookupError || !bookingRow?.business_id) {
+      console.error("Failed to resolve business_id from booking:", bookingLookupError?.message);
+      return new Response(
+        JSON.stringify({ success: false, error: "Could not resolve business for this booking" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const resolvedBusinessId = bookingRow.business_id;
+    console.log(`[GoogleCalendar] Resolved business_id: ${resolvedBusinessId} for booking: ${booking_id}`);
+
+    // Step 2: Fetch Google Calendar credentials from the correct tenant's settings row.
+    // Uses the `settings` table (single source of truth for all business config).
     const { data: businessSettings, error: settingsError } = await supabase
-      .from("business_settings")
+      .from("settings")
       .select("google_calendar_refresh_token, google_calendar_connected")
-      .not("google_calendar_refresh_token", "is", null)
-      .limit(1)
+      .eq("business_id", resolvedBusinessId)
       .maybeSingle();
 
     if (settingsError || !businessSettings?.google_calendar_refresh_token) {
-      console.log("No Google Calendar refresh_token found - skipping calendar sync");
+      console.log(`[GoogleCalendar] No refresh_token found for business_id: ${resolvedBusinessId}`);
       return new Response(
         JSON.stringify({ success: false, error: "Google Calendar not connected" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -158,7 +179,7 @@ serve(async (req) => {
     }
 
     if (!businessSettings.google_calendar_connected) {
-      console.log("Google Calendar not connected - skipping calendar sync");
+      console.log(`[GoogleCalendar] Calendar not enabled for business_id: ${resolvedBusinessId}`);
       return new Response(
         JSON.stringify({ success: false, error: "Google Calendar not connected" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }

@@ -128,14 +128,20 @@ export async function getAvailableSlots(
   supabase: SupabaseClient,
   businessId?: string | null,
 ): Promise<TimeSlot[]> {
-  // 1. Fetch settings
-  let settingsQuery = supabase
-    .from('settings')
-    .select('working_hours_start, working_hours_end, slot_duration_min, working_days, min_advance_hours');
-  if (businessId) {
-    settingsQuery = settingsQuery.eq('business_id', businessId);
+  // Security guard: businessId is mandatory for tenant isolation.
+  // Without it we cannot scope any of the following queries (settings, bookings, blocked_slots)
+  // to a single tenant. Return empty rather than risk cross-tenant data leaks.
+  if (!businessId) {
+    console.warn('[slotAvailability] getAvailableSlots called without businessId — aborting');
+    return [];
   }
-  const { data: settings } = await settingsQuery.limit(1).maybeSingle();
+
+  // 1. Fetch settings — scoped strictly to this business
+  const { data: settings } = await supabase
+    .from('settings')
+    .select('working_hours_start, working_hours_end, slot_duration_min, working_days, min_advance_hours')
+    .eq('business_id', businessId)
+    .maybeSingle();
 
   if (!settings) {
     console.warn('No settings found - using defaults');
@@ -169,17 +175,14 @@ export async function getAvailableSlots(
   // 5. Filter by closing time
   slots = filterSlotsWithinWorkingHours(slots, duration, endTime);
 
-  // 6. Fetch existing bookings with service duration
+  // 6. Fetch existing bookings with service duration — scoped strictly to this business
   const dateStr = format(date, 'yyyy-MM-dd');
-  let bookingsQuery = supabase
+  const { data: bookingsData } = await supabase
     .from('bookings')
     .select('id, booking_date, booking_time, status, service_id')
+    .eq('business_id', businessId)
     .eq('booking_date', dateStr)
     .in('status', ['confirmed', 'pending']);
-  if (businessId) {
-    bookingsQuery = bookingsQuery.eq('business_id', businessId);
-  }
-  const { data: bookingsData } = await bookingsQuery;
 
   // Fetch service durations for all bookings
   const serviceIds = [...new Set((bookingsData ?? []).map((b: any) => b.service_id).filter(Boolean))];
@@ -204,15 +207,12 @@ export async function getAvailableSlots(
   // 7. Check conflicts
   slots = checkSlotAvailability(slots, (bookings ?? []) as unknown as BookingWithService[], duration);
 
-  // 8. Fetch blocked slots for this date
-  let blockedQuery = supabase
+  // 8. Fetch blocked slots for this date — scoped strictly to this business
+  const { data: blockedSlots } = await supabase
     .from('blocked_slots')
     .select('start_time, end_time, reason')
+    .eq('business_id', businessId)
     .eq('blocked_date', dateStr);
-  if (businessId) {
-    blockedQuery = blockedQuery.eq('business_id', businessId);
-  }
-  const { data: blockedSlots } = await blockedQuery;
 
   // 9. Mark slots as unavailable if they fall in blocked time ranges
   if (blockedSlots && blockedSlots.length > 0) {

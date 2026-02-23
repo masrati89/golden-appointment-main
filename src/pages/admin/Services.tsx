@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
-import { useSettings } from '@/hooks/useSettings';
 import { Plus, Sparkles, Trash2, X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
@@ -32,9 +31,8 @@ const emptyForm: ServiceForm = {
 
 export default function ServicesManagement() {
   const queryClient = useQueryClient();
-  const { user } = useAdminAuth();
-  const { data: settings } = useSettings();
-  const businessId = settings?.business_id ?? null;
+  // businessId is sourced from auth context (loaded once at login) — single source of truth.
+  const { user, businessId } = useAdminAuth();
   const [editing, setEditing] = useState<ServiceForm | null>(null);
 
   const { data: services } = useQuery({
@@ -52,16 +50,24 @@ export default function ServicesManagement() {
 
   const saveMutation = useMutation({
     mutationFn: async (form: ServiceForm) => {
+      // Security guard: business_id must be present before any write operation
+      if (!businessId) throw new Error('שגיאה: מזהה עסק חסר');
+
       if (form.id) {
-        const { error } = await supabase.from('services').update({
-          name: form.name,
-          description: form.description || null,
-          price: form.price,
-          duration_min: form.duration_min,
-          image_url: form.image_url || null,
-          is_active: form.is_active,
-          sort_order: form.sort_order,
-        }).eq('id', form.id);
+        // UPDATE: scope to own business_id to prevent cross-tenant overwrites
+        const { error } = await supabase
+          .from('services')
+          .update({
+            name: form.name,
+            description: form.description || null,
+            price: form.price,
+            duration_min: form.duration_min,
+            image_url: form.image_url || null,
+            is_active: form.is_active,
+            sort_order: form.sort_order,
+          })
+          .eq('id', form.id)
+          .eq('business_id', businessId);
         if (error) throw error;
       } else {
         const { error } = await supabase.from('services').insert({
@@ -78,7 +84,8 @@ export default function ServicesManagement() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-services'] });
+      // Include businessId in invalidation key — prevents clearing another tenant's cache
+      queryClient.invalidateQueries({ queryKey: ['admin-services', businessId] });
       setEditing(null);
       toast.success('השירות נשמר');
     },
@@ -87,11 +94,18 @@ export default function ServicesManagement() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('services').delete().eq('id', id);
+      // Security guard: scope DELETE to own business_id to prevent cross-tenant deletion
+      if (!businessId) throw new Error('שגיאה: מזהה עסק חסר');
+      const { error } = await supabase
+        .from('services')
+        .delete()
+        .eq('id', id)
+        .eq('business_id', businessId);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-services'] });
+      // Include businessId in invalidation key — prevents clearing another tenant's cache
+      queryClient.invalidateQueries({ queryKey: ['admin-services', businessId] });
       toast.success('השירות נמחק');
     },
   });

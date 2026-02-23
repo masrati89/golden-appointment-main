@@ -196,8 +196,9 @@ function CalendarTimeScreen({
   onSelectDate: (date: Date) => void;
   onSelectTime: (time: string) => void;
 }) {
-  const { data: settings } = useSettings();
+  // businessId is sourced first — useSettings must be scoped to the correct tenant
   const { businessId } = useBusinessSafe();
+  const { data: settings } = useSettings(businessId);
   const today = startOfDay(new Date());
   const [currentMonth, setCurrentMonth] = useState(today);
 
@@ -667,7 +668,9 @@ function ConfirmationScreen({
 const BookingWizard = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { data: settings } = useSettings();
+  // businessId is sourced first — all data queries must be scoped to this tenant
+  const { businessId } = useBusinessSafe();
+  const { data: settings } = useSettings(businessId);
 
   const [step, setStep] = useState<WizardStep>(0);
   const [selectedService, setSelectedService] = useState<any>(null);
@@ -695,9 +698,15 @@ const BookingWizard = () => {
       if (!formData || !selectedDate || !selectedTime || !selectedService) throw new Error('חסרים פרטים');
 
       const dateStr = format(selectedDate, 'yyyy-MM-dd');
+
+      // Security guard: conflict check must be scoped to this business only.
+      // Without business_id, a slot taken in Business B would block booking in Business A.
+      if (!businessId) throw new Error('שגיאה: לא ניתן לאמת את פרטי העסק');
+
       const { data: conflict } = await supabase
         .from('bookings')
         .select('id')
+        .eq('business_id', businessId)
         .eq('booking_date', dateStr)
         .eq('booking_time', selectedTime)
         .in('status', ['confirmed', 'pending'])
@@ -708,6 +717,9 @@ const BookingWizard = () => {
       const { data, error } = await supabase
         .from('bookings')
         .insert({
+          // business_id is explicitly set so the booking is always associated
+          // with the correct tenant — never rely on a DB trigger for this.
+          business_id: businessId,
           service_id: selectedService.id,
           booking_date: dateStr,
           booking_time: selectedTime,
@@ -728,7 +740,8 @@ const BookingWizard = () => {
 
       // WhatsApp is sent via Database Webhook on INSERT; no frontend invoke.
 
-      // Create Google Calendar event (non-blocking)
+      // Create Google Calendar event (non-blocking — booking success is not dependent on this).
+      // On failure: log + notify the user with a non-critical warning toast so they are aware.
       if (settings?.google_calendar_connected) {
         supabase.functions.invoke('create-google-calendar-event', {
           body: {
@@ -743,7 +756,8 @@ const BookingWizard = () => {
             notes: formData.notes || null,
           },
         }).catch((err) => {
-          console.error('Failed to create Google Calendar event:', err);
+          console.error('[BookingWizard] Google Calendar sync failed:', err);
+          toast.warning('ההזמנה נשמרה, אך הסנכרון עם יומן Google נכשל');
         });
       }
 
