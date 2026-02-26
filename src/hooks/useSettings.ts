@@ -61,6 +61,10 @@ const SAFE_SELECT = [
   'facebook_url',
   'show_instagram',
   'show_facebook',
+  // ── Portfolio gallery ────────────────────────────────────────────────
+  'show_gallery',
+  'custom_images',
+  'instagram_urls',
   // ── Payment gateway (BYOG) ──────────────────────────────────────────
   // Admin-entered credentials needed to pre-populate the Payments settings page.
   // morning_api_key / morning_api_secret / meshulam_api_token are treated like

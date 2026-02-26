@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useSettings } from '@/hooks/useSettings';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import { toast } from 'sonner';
-import { Loader2, Save, Settings, Calendar, Bell, Upload, X, AlertCircle } from 'lucide-react';
+import { Loader2, Save, Settings, Calendar, Bell, Upload, X, AlertCircle, Images } from 'lucide-react';
 import { GoogleSyncStatus } from '@/components/GoogleSyncStatus';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,6 +16,7 @@ const tabs = [
   { id: 'general',       label: 'כללי',    icon: Settings },
   { id: 'booking',       label: 'הזמנות',  icon: Calendar },
   { id: 'notifications', label: 'התראות',  icon: Bell },
+  { id: 'gallery',       label: 'גלריה',   icon: Images },
 ];
 
 function isValidIsraeliPhone(phone: string): boolean {
@@ -100,6 +101,7 @@ export default function AdminSettings() {
     'whatsapp_api_token', 'whatsapp_float_number', 'working_days',
     'working_hours_end', 'working_hours_start',
     'instagram_url', 'facebook_url', 'show_instagram', 'show_facebook',
+    'show_gallery', 'custom_images', 'instagram_urls',
     'whatsapp_enabled',
     'whatsapp_api_url',
     'whatsapp_admin_phone',
@@ -377,6 +379,79 @@ export default function AdminSettings() {
               </div>
             </div>
           </Section>
+        )}
+        {activeTab === 'gallery' && (
+          <>
+            <Section title="גלריית עבודות">
+              <ToggleRow
+                label="הצג גלריה בדף העסק"
+                checked={form.show_gallery ?? false}
+                onChange={(v) => update('show_gallery', v)}
+              />
+              <p className="text-xs text-muted-foreground">
+                הגלריה תופיע כקרוסל אופקי מתחת לכפתור &quot;קביעת תור&quot; בדף הבית הציבורי.
+              </p>
+            </Section>
+
+            {form.show_gallery && (
+              <>
+                {/* A. Instagram post URLs */}
+                <Section title="📷 פוסטים מ-Instagram">
+                  <p className="text-xs text-muted-foreground -mt-2">
+                    הוסף קישורים לפוסטים ספציפיים ב-Instagram (לדוגמה: https://www.instagram.com/p/ABC123/)
+                  </p>
+                  <div className="space-y-2">
+                    {(form.instagram_urls ?? []).map((url: string, i: number) => (
+                      <div key={i} className="flex gap-2">
+                        <Input
+                          value={url}
+                          onChange={(e) => {
+                            const arr = [...(form.instagram_urls ?? [])];
+                            arr[i] = e.target.value;
+                            update('instagram_urls', arr);
+                          }}
+                          placeholder="https://www.instagram.com/p/..."
+                          className="h-10 rounded-xl flex-1"
+                          dir="ltr"
+                          autoComplete="off"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const arr = (form.instagram_urls ?? []).filter((_: string, j: number) => j !== i);
+                            update('instagram_urls', arr);
+                          }}
+                          className="h-10 w-10 flex items-center justify-center rounded-xl bg-destructive/10 hover:bg-destructive/20 text-destructive transition-colors flex-shrink-0"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => update('instagram_urls', [...(form.instagram_urls ?? []), ''])}
+                      className="h-10 px-4 rounded-xl border-2 border-dashed border-border hover:border-primary/40 text-sm text-muted-foreground hover:text-foreground transition-colors w-full"
+                    >
+                      + הוסף קישור Instagram
+                    </button>
+                  </div>
+                </Section>
+
+                {/* B. Custom uploaded images */}
+                <Section title="🖼️ תמונות מותאמות אישית">
+                  <p className="text-xs text-muted-foreground -mt-2">
+                    העלה תמונות ישירות מהמכשיר שלך — מאוחסנות בענן ב-Supabase Storage.
+                  </p>
+                  <GalleryUploadField
+                    businessId={businessId!}
+                    settingsId={form.id}
+                    images={form.custom_images ?? []}
+                    onImagesChange={(imgs) => update('custom_images', imgs)}
+                  />
+                </Section>
+              </>
+            )}
+          </>
         )}
         </motion.div>
       </div>
@@ -681,6 +756,139 @@ function BackgroundImageUploadField({ value, onChange }: { value: string; onChan
           {value ? 'החלף תמונה' : 'העלה תמונת רקע'}
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Gallery upload component ─────────────────────────────────────────────
+
+function GalleryUploadField({
+  businessId,
+  settingsId,
+  images,
+  onImagesChange,
+}: {
+  businessId: string;
+  settingsId: string;
+  images: string[];
+  onImagesChange: (imgs: string[]) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const queryClient = useQueryClient();
+
+  const handleUpload = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      toast.error('יש להעלות קובץ תמונה בלבד');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('גודל הקובץ מקסימלי 10MB');
+      return;
+    }
+    setUploading(true);
+    try {
+      const sanitizedName = file.name.replace(/[^a-zA-Z0-9.]/g, '');
+      const filePath = `${businessId}/${Date.now()}_${sanitizedName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('business_gallery')
+        .upload(filePath, file, { upsert: false });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('business_gallery')
+        .getPublicUrl(filePath);
+
+      const newImages = [...images, publicUrl];
+      onImagesChange(newImages);
+
+      // Persist immediately to DB
+      if (settingsId) {
+        const { error: updateError } = await supabase
+          .from('settings')
+          .update({ custom_images: newImages })
+          .eq('id', settingsId)
+          .eq('business_id', businessId);
+        if (updateError) {
+          console.error('Gallery DB update error:', updateError.message);
+          toast.warning('התמונה הועלתה אך לא נשמרה. לחץ שמור הגדרות ידנית.');
+        } else {
+          queryClient.invalidateQueries({ queryKey: ['settings', businessId] });
+        }
+      }
+      toast.success('התמונה הועלתה בהצלחה');
+    } catch (err: any) {
+      toast.error(`שגיאה בהעלאת התמונה: ${err?.message ?? 'שגיאה לא ידועה'}`);
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const handleRemove = async (url: string, index: number) => {
+    // Extract storage path from the public URL
+    const marker = '/object/public/business_gallery/';
+    const markerIdx = url.indexOf(marker);
+    const filePath = markerIdx !== -1 ? url.slice(markerIdx + marker.length) : null;
+
+    const newImages = images.filter((_, i) => i !== index);
+    onImagesChange(newImages);
+
+    // Delete file from storage (best-effort — do not block UI on failure)
+    if (filePath) {
+      const { error } = await supabase.storage.from('business_gallery').remove([filePath]);
+      if (error) console.warn('Storage delete error (non-blocking):', error.message);
+    }
+
+    // Persist updated array
+    if (settingsId) {
+      const { error: updateError } = await supabase
+        .from('settings')
+        .update({ custom_images: newImages })
+        .eq('id', settingsId)
+        .eq('business_id', businessId);
+      if (updateError) console.error('Gallery remove DB error:', updateError.message);
+      else queryClient.invalidateQueries({ queryKey: ['settings', businessId] });
+    }
+    toast.success('התמונה הוסרה');
+  };
+
+  return (
+    <div className="space-y-4">
+      {images.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {images.map((url, i) => (
+            <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-border bg-secondary">
+              <img src={url} alt={`גלריה ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
+              <button
+                type="button"
+                onClick={() => handleRemove(url, i)}
+                className="absolute top-1.5 left-1.5 bg-destructive text-destructive-foreground rounded-full p-1 shadow-md hover:bg-destructive/90 transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={() => fileRef.current?.click()}
+        disabled={uploading}
+        className="h-11 px-4 rounded-xl border-2 border-dashed border-border hover:border-primary/40 text-sm text-muted-foreground hover:text-foreground transition-colors w-full flex items-center justify-center gap-2 disabled:opacity-50"
+      >
+        {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+        {uploading ? 'מעלה...' : 'הוסף תמונה'}
+      </button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => { if (e.target.files?.[0]) handleUpload(e.target.files[0]); }}
+      />
     </div>
   );
 }

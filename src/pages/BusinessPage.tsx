@@ -6,13 +6,12 @@
  * אם ה-slug לא קיים — מציג 404 מעוצב.
  */
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Calendar, Heart, Instagram, Facebook, ArrowRight, ArrowDown, Loader2 } from 'lucide-react';
+import { Sparkles, Calendar, Heart, Instagram, Facebook, ArrowRight, ArrowDown } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useBusiness } from '@/contexts/BusinessContext';
 import { useSettings } from '@/hooks/useSettings';
 import FloatingWhatsApp from '@/components/FloatingWhatsApp';
-import { supabase } from '@/integrations/supabase/client';
-import { useState } from 'react';
+import BottomNav from '@/components/BottomNav';
 
 // ─── 404 מעוצב ───────────────────────────────────────────────
 function BusinessNotFound() {
@@ -48,23 +47,10 @@ function BusinessPageContent() {
   const navigate = useNavigate();
   const { business, businessId } = useBusiness();
   const { data: settings } = useSettings(businessId);
-  const [isCheckingAuth, setIsCheckingAuth] = useState(false);
-
   const bgImageUrl = settings?.background_image_url;
 
-  const handleBookAppointment = async () => {
-    setIsCheckingAuth(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const bookingPath = `/b/${business!.slug}/book`;
-      if (!session) {
-        navigate(`/login?next=${encodeURIComponent(bookingPath)}`);
-      } else {
-        navigate(bookingPath);
-      }
-    } finally {
-      setIsCheckingAuth(false);
-    }
+  const handleBookAppointment = () => {
+    navigate(`/b/${business!.slug}/book`);
   };
 
   const steps = [
@@ -89,7 +75,7 @@ function BusinessPageContent() {
         className="flex-1 flex flex-col justify-center w-full px-4 sm:px-6 md:px-8 overflow-y-auto z-10 relative"
         style={{
           paddingTop: 'max(calc(env(safe-area-inset-top, 0px) + 3.5rem), 3.5rem)',
-          paddingBottom: 'max(calc(env(safe-area-inset-bottom, 0px) + 4rem), 4rem)',
+          paddingBottom: 'max(calc(env(safe-area-inset-bottom, 0px) + 7rem), 7rem)',
         }}
       >
         <div className="w-full max-w-7xl mx-auto flex flex-col justify-center items-center gap-y-6 md:gap-y-8 py-4">
@@ -169,14 +155,61 @@ function BusinessPageContent() {
           >
             <button
               onClick={handleBookAppointment}
-              disabled={isCheckingAuth}
-              className="h-12 sm:h-14 px-10 sm:px-12 rounded-xl text-base sm:text-lg font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-gold-md hover:shadow-gold-lg hover:scale-105 transition-all duration-200 active:scale-[0.97] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 mx-auto"
+              className="h-12 sm:h-14 px-10 sm:px-12 rounded-xl text-base sm:text-lg font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-gold-md hover:shadow-gold-lg hover:scale-105 transition-all duration-200 active:scale-[0.97] flex items-center justify-center gap-2 mx-auto"
             >
-              {isCheckingAuth ? (
-                <><Loader2 className="w-5 h-5 animate-spin" /><span>בודק...</span></>
-              ) : 'קביעת תור'}
+              קביעת תור
             </button>
           </motion.div>
+
+          {/* Gallery carousel */}
+          {(settings as any)?.show_gallery &&
+            (((settings as any)?.custom_images?.length ?? 0) + ((settings as any)?.instagram_urls?.length ?? 0) > 0) && (
+            <motion.section
+              className="w-full flex-shrink-0 mt-2"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3, delay: 0.6 }}
+            >
+              <p className={`text-sm font-semibold mb-3 text-center ${bgImageUrl ? 'text-white' : 'text-foreground'}`}>
+                העבודות שלנו
+              </p>
+              <div className="flex overflow-x-auto gap-4 snap-x snap-mandatory pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                {((settings as any).custom_images ?? []).map((url: string, i: number) => (
+                  <div
+                    key={`img-${i}`}
+                    className="flex-shrink-0 w-64 h-64 snap-center rounded-xl overflow-hidden border border-white/20 shadow-md"
+                  >
+                    <img
+                      src={url}
+                      alt={`עבודה ${i + 1}`}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  </div>
+                ))}
+                {((settings as any).instagram_urls ?? [])
+                  .filter((url: string) => url.startsWith('https://www.instagram.com/'))
+                  .map((url: string, i: number) => {
+                    const embedUrl = url.replace(/\/?$/, '/embed/');
+                    return (
+                      <div
+                        key={`ig-${i}`}
+                        className="flex-shrink-0 w-64 h-64 snap-center rounded-xl overflow-hidden border border-white/20 shadow-md bg-white"
+                      >
+                        <iframe
+                          src={embedUrl}
+                          className="w-full h-full"
+                          frameBorder="0"
+                          scrolling="no"
+                          loading="lazy"
+                          title={`Instagram ${i + 1}`}
+                        />
+                      </div>
+                    );
+                  })}
+              </div>
+            </motion.section>
+          )}
 
           {/* Social */}
           {(settings?.show_instagram || settings?.show_facebook) && (
@@ -212,6 +245,7 @@ function BusinessPageContent() {
         ניהול
       </a>
       <FloatingWhatsApp />
+      <BottomNav />
     </div>
   );
 }
