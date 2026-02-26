@@ -8,8 +8,7 @@ import { format, addDays, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { useClientAuth } from '@/contexts/ClientAuthContext';
 import { useBusinessSafe } from '@/contexts/BusinessContext';
-import { saveBookingState, getAndClearBookingState } from '@/lib/bookingState';
-import { Info, Lock } from 'lucide-react';
+import { getAndClearBookingState } from '@/lib/bookingState';
 import {
   Clock,
   Calendar,
@@ -23,6 +22,9 @@ import {
   Wallet,
   Smartphone,
   CreditCard,
+  Mail,
+  ArrowLeft,
+  Sparkles,
 } from 'lucide-react';
 
 import Layout from '@/components/Layout';
@@ -68,10 +70,39 @@ const BookingVertical = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const { businessId, business } = useBusinessSafe();
+  const { businessId, business, isLoading: businessLoading, notFound: businessNotFound } = useBusinessSafe();
   const { data: settings } = useSettings(businessId);
   const { data: services, isLoading: servicesLoading } = useServices(businessId);
-  const { isAuthenticated, isLoading: authLoading } = useClientAuth();
+  const { isAuthenticated, isLoading: authLoading, sendMagicLink } = useClientAuth();
+
+  // Guest mode gatekeeper state
+  const [isGuestMode, setIsGuestMode] = useState(false);
+  const [gkEmail, setGkEmail] = useState('');
+  const [gkEmailError, setGkEmailError] = useState('');
+  const [gkSubmitting, setGkSubmitting] = useState(false);
+  const [gkSent, setGkSent] = useState(false);
+
+  const GK_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  const handleGkSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!GK_EMAIL_REGEX.test(gkEmail)) {
+      setGkEmailError('כתובת אימייל לא תקינה');
+      return;
+    }
+    setGkEmailError('');
+    setGkSubmitting(true);
+    try {
+      const result = await sendMagicLink(gkEmail, location.pathname);
+      if (result.success) {
+        setGkSent(true);
+      } else {
+        setGkEmailError(result.error || 'שגיאה בשליחת הקישור');
+      }
+    } finally {
+      setGkSubmitting(false);
+    }
+  };
 
   // Selection state
   const [selectedService, setSelectedService] = useState<any>(null);
@@ -172,44 +203,10 @@ const BookingVertical = () => {
     setFormData(data);
   };
 
-  // Check authentication before booking
-  const requireAuth = async (): Promise<boolean> => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      // Save booking state before redirecting
-      if (selectedService && selectedDate && selectedTime && formData) {
-        saveBookingState({
-          serviceId: selectedService.id,
-          selectedDate: format(selectedDate, 'yyyy-MM-dd'),
-          selectedTime: selectedTime,
-          formData: {
-            customerName: formData.customerName,
-            customerPhone: formData.customerPhone,
-            customerEmail: formData.customerEmail || '',
-            notes: formData.notes,
-          },
-          selectedPayment: selectedPayment || undefined,
-          returnPath: location.pathname + location.search,
-        });
-      }
-      toast.info('יש להתחבר כדי להשלים את ההזמנה', {
-        description: 'אחרי ההתחברות תועבר חזרה להזמנה',
-      });
-      navigate('/login', { state: { from: location.pathname } });
-      return false;
-    }
-    return true;
-  };
-
-  // Booking mutation
+  // Booking mutation — open to guests (no login required).
+  // Authenticated users get client_id set; guests book with client_id = null.
   const createBooking = useMutation({
     mutationFn: async (method: PaymentMethod) => {
-      // Check authentication first
-      const isAuthenticated = await requireAuth();
-      if (!isAuthenticated) {
-        throw new Error('נדרשת התחברות');
-      }
-
       if (!formData || !selectedDate || !selectedTime || !selectedService) throw new Error('חסרים פרטים');
       const dateStr = format(selectedDate, 'yyyy-MM-dd');
 
@@ -245,6 +242,20 @@ const BookingVertical = () => {
         }
       }
 
+      // Determine whether this business requires gateway payment
+      const gatewayRequired =
+        (settings as any)?.is_payment_required === true &&
+        (settings as any)?.payment_gateway != null;
+
+      // Resolve payment_status for this booking
+      const resolvedPaymentStatus = gatewayRequired
+        ? 'pending'
+        : method === 'cash'
+        ? 'not_required'
+        : method === 'stripe'
+        ? 'pending'
+        : 'partial';
+
       const { data, error } = await supabase
         .from('bookings')
         .insert({
@@ -254,21 +265,89 @@ const BookingVertical = () => {
           customer_name: formData.customerName,
           customer_phone: formData.customerPhone,
           customer_email: formData.customerEmail || session?.user?.email || null,
-          client_id: userId, // Link booking to authenticated user
+          client_id: userId,
           business_id: businessId || null,
           notes: formData.notes || null,
           total_price: Number(selectedService.price),
-          payment_method: method,
+          payment_method: gatewayRequired ? (settings as any).payment_gateway : method,
           deposit_amount: depositAmount,
-          payment_status: method === 'cash' ? 'pending' : method === 'stripe' ? 'pending' : 'partial',
-          status: method === 'stripe' ? 'pending' : 'pending',
+          payment_status: resolvedPaymentStatus,
+          status: 'pending',
         })
         .select()
         .single();
 
       if (error) throw error;
 
-      // Create Google Calendar event (non-blocking)
+      // ── Gateway checkout (Morning / Meshulam) ──────────────────────
+      // If the business requires gateway payment, call the edge function
+      // and redirect the client immediately. This supersedes the normal
+      // success-screen flow for this booking.
+      if (gatewayRequired) {
+        const chargeAmount =
+          (settings as any).payment_type === 'deposit' &&
+          (settings as any).deposit_amount > 0
+            ? Number((settings as any).deposit_amount)
+            : Number(selectedService.price);
+
+        const { data: checkoutData, error: checkoutErr } = await supabase.functions.invoke(
+          'create-checkout-session',
+          {
+            body: {
+              booking_id: data.id,
+              business_id: businessId,
+              amount: chargeAmount,
+              customer_name: formData.customerName,
+              customer_email: formData.customerEmail || session?.user?.email || null,
+              customer_phone: formData.customerPhone,
+              service_name: selectedService?.name ?? null,
+            },
+            headers: session?.access_token
+              ? { Authorization: `Bearer ${session.access_token}` }
+              : undefined,
+          }
+        );
+
+        if (checkoutErr || !(checkoutData as any)?.checkoutUrl) {
+          // ── Revert: delete the pending booking to free the time slot ───
+          // Only delete if it is still in 'pending' state (safety guard).
+          try {
+            await supabase
+              .from('bookings')
+              .delete()
+              .eq('id', data.id)
+              .eq('payment_status', 'pending');
+            console.log('[checkout] reverted pending booking', data.id);
+          } catch (deleteErr) {
+            console.warn('[checkout] could not revert booking:', deleteErr);
+          }
+
+          // ── Extract the error detail from the 400 response body ──────
+          // supabase.functions.invoke sets checkoutErr (FunctionsHttpError)
+          // on any non-2xx. The JSON body is in checkoutErr.context.
+          let technicalDetail = checkoutErr?.message ?? 'unknown error';
+          try {
+            const errBody = await (checkoutErr as any)?.context?.json?.();
+            if (errBody?.details) technicalDetail = errBody.details;
+            else if (errBody?.error) technicalDetail = errBody.error;
+          } catch {
+            // context not parseable — keep the generic message
+          }
+          console.error('[checkout] gateway error:', technicalDetail);
+
+          // Always show a user-friendly Hebrew message — raw gateway errors
+          // (English, technical) should never be exposed to the customer.
+          throw new Error(
+            'שגיאה בתקשורת עם מערכת התשלומים של העסק. אנא נסה שוב או צור קשר עם בית העסק.'
+          );
+        }
+
+        console.log('[checkout] redirecting to:', (checkoutData as any).checkoutUrl);
+        window.location.href = (checkoutData as any).checkoutUrl;
+        return data; // won't reach onSuccess — page is navigating away
+      }
+
+      // Create Google Calendar event (non-blocking — must never delay booking confirmation)
       if (settings?.google_calendar_connected) {
         supabase.functions.invoke('create-google-calendar-event', {
           body: {
@@ -282,8 +361,17 @@ const BookingVertical = () => {
             service_duration_min: selectedService.duration_min,
             notes: formData.notes || null,
           },
+          headers: session?.access_token
+            ? { Authorization: `Bearer ${session.access_token}` }
+            : undefined,
+        }).then((res) => {
+          if (res.error) {
+            console.error('[calendar] invoke error:', res.error);
+          } else {
+            console.log('[calendar] event created:', (res.data as { event_id?: string })?.event_id);
+          }
         }).catch((err) => {
-          console.error('Failed to create Google Calendar event:', err);
+          console.error('[calendar] Failed to create Google Calendar event:', err);
         });
       }
 
@@ -426,6 +514,135 @@ const BookingVertical = () => {
     ].filter((m) => m.enabled);
   }, [settings, selectedService, depositAmount]);
 
+  /* ═══ GATEKEEPER — shown before booking steps for unauthenticated users ═══ */
+
+  // Loading — wait for both auth session and business data before deciding what to show
+  if (authLoading || businessLoading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </Layout>
+    );
+  }
+
+  // Business not found
+  if (businessNotFound) {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center px-4" dir="rtl">
+          <div className="text-5xl">🏪</div>
+          <h2 className="text-xl font-bold text-foreground">העסק לא נמצא</h2>
+          <p className="text-sm text-muted-foreground max-w-xs">
+            הכתובת שהזנת אינה קיימת במערכת. ייתכן שהעסק הפסיק לפעול או שהקישור שגוי.
+          </p>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!isAuthenticated && !isGuestMode) {
+    return (
+      <Layout>
+        <div className="max-w-[340px] mx-auto py-6 space-y-5" dir="rtl">
+          {/* Logo / Avatar — sourced from BusinessContext (same fetch as businessId, no race) */}
+          <div className="flex flex-col items-center pt-2 gap-3">
+            {business?.logo_url ? (
+              <img
+                src={business.logo_url}
+                alt={business.name || 'לוגו'}
+                className="h-16 w-16 rounded-full object-cover shadow-md border border-border"
+                loading="lazy"
+              />
+            ) : (
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center shadow-md border border-border/30">
+                <Sparkles className="w-8 h-8 text-primary" />
+              </div>
+            )}
+            <h2 className="text-2xl font-bold text-foreground tracking-tight">התחברות</h2>
+            <p className="text-sm text-gray-500 text-center mt-1 mb-6">התחברו להיות חברי המועדון שלנו</p>
+          </div>
+
+          {!gkSent ? (
+            <>
+              <form onSubmit={handleGkSubmit} className="glass-card p-5 rounded-2xl space-y-4 shadow-sm">
+                <div>
+                  <Label className="text-sm font-semibold mb-1.5 block">
+                    כתובת אימייל
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      type="email"
+                      value={gkEmail}
+                      onChange={(e) => { setGkEmail(e.target.value); setGkEmailError(''); }}
+                      placeholder="your@email.com"
+                      className={`h-12 text-base rounded-xl border-2 pr-12 ${gkEmailError ? 'border-destructive' : ''}`}
+                      dir="ltr"
+                      autoFocus
+                    />
+                    <Mail className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  </div>
+                  {gkEmailError && (
+                    <p className="text-destructive text-xs mt-1.5 flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      {gkEmailError}
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="submit"
+                  disabled={gkSubmitting || !gkEmail}
+                  className="w-full h-12 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {gkSubmitting ? (
+                    <><Loader2 className="w-5 h-5 animate-spin" />שולח קישור...</>
+                  ) : (
+                    <><Mail className="w-5 h-5" />שלח קישור כניסה</>
+                  )}
+                </button>
+              </form>
+
+              {/* Divider */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-border" />
+                <span className="text-xs text-muted-foreground px-1">או</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+
+              {/* Guest CTA — subtle text link */}
+              <button
+                onClick={() => setIsGuestMode(true)}
+                className="text-sm text-gray-500 hover:text-gray-700 cursor-pointer flex items-center justify-center gap-2 transition-colors mx-auto"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                המשך כאורח
+              </button>
+            </>
+          ) : (
+            /* Sent confirmation */
+            <div className="glass-card p-6 rounded-2xl space-y-3 text-center shadow-sm">
+              <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+                <Check className="w-7 h-7 text-green-600" />
+              </div>
+              <p className="font-bold text-foreground">קישור נשלח!</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                בדוק את תיבת הדואר (<strong>{gkEmail}</strong>) ולחץ על הקישור להתחברות.
+              </p>
+              <button
+                onClick={() => setIsGuestMode(true)}
+                className="text-sm text-gray-500 hover:text-gray-700 cursor-pointer flex items-center justify-center gap-2 transition-colors mx-auto"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                המשך בינתיים כאורח
+              </button>
+            </div>
+          )}
+        </div>
+      </Layout>
+    );
+  }
+
   /* ═══ MAIN VERTICAL FLOW ═══ */
   const stepSectionClass = 'scroll-mt-[76px] min-h-0';
   return (
@@ -511,27 +728,6 @@ const BookingVertical = () => {
         {selectedTime && selectedDate && selectedService && (
           <section ref={formRef} className={`animate-slide-up ${stepSectionClass}`}>
             <StepBadge number={4} title="פרטים אישיים" />
-
-            {/* Auth Notice */}
-            {!isAuthenticated && !authLoading && (
-              <div className="max-w-[340px] mx-auto mb-3 sm:mb-4">
-                <div className="glass-card p-3 sm:p-4 border border-primary/30 bg-primary/5 rounded-xl flex items-start gap-3">
-                  <div className="flex-shrink-0 mt-0.5">
-                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                      <Lock className="w-4 h-4 text-primary" />
-                    </div>
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-foreground mb-1">
-                      התחברות נדרשת
-                    </p>
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      כדי לשמור על הפרטיות שלך ולנהל את התורים שלך, יש להתחבר למערכת. ההזמנה תישמר אוטומטית.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Summary Card */}
             <div className="glass-card p-3 sm:p-4 mb-3 sm:mb-4 border border-primary/20 max-w-[340px] mx-auto rounded-2xl shadow-sm">
@@ -670,7 +866,7 @@ const BookingVertical = () => {
                       )}
                       {isSelected && method.id === 'stripe' && (
                         <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-950 rounded-xl text-[11px] text-blue-900 dark:text-blue-200">
-                          <p>• תשלום מאובטח דרך Stripe</p>
+                          <p>• תשלום מאובטח בכרטיס אשראי</p>
                           <p>• כל כרטיסי האשראי נתמכים</p>
                         </div>
                       )}

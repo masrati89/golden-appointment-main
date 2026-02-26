@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useSettings } from '@/hooks/useSettings';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import { toast } from 'sonner';
-import { Loader2, Save, Settings, CreditCard, Calendar, Bell, Upload, X, AlertCircle } from 'lucide-react';
+import { Loader2, Save, Settings, Calendar, Bell, Upload, X, AlertCircle } from 'lucide-react';
 import { GoogleSyncStatus } from '@/components/GoogleSyncStatus';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,10 +13,9 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 
 const tabs = [
-  { id: 'general', label: 'כללי', icon: Settings },
-  { id: 'payment', label: 'תשלומים', icon: CreditCard },
-  { id: 'booking', label: 'הזמנות', icon: Calendar },
-  { id: 'notifications', label: 'התראות', icon: Bell },
+  { id: 'general',       label: 'כללי',    icon: Settings },
+  { id: 'booking',       label: 'הזמנות',  icon: Calendar },
+  { id: 'notifications', label: 'התראות',  icon: Bell },
 ];
 
 function isValidIsraeliPhone(phone: string): boolean {
@@ -86,17 +85,18 @@ export default function AdminSettings() {
   }, [queryClient]);
 
   // רשימת העמודות שנשמרות בלחיצת "שמור הגדרות".
-  // stripe_secret_key מוחרג מכאן בכוונה — הוא מנוהל בנפרד
-  // דרך SecretKeyField שמטפל בו באופן מבודד ומאובטח.
+  // Payment columns managed exclusively by the dedicated Payments page — not saved here:
+  //   payment_cash_enabled, payment_bank_enabled, bank_account/branch/name,
+  //   is_deposit_active, deposit_fixed_amount/percentage,
+  //   is_payment_required, payment_gateway, morning_token, meshulam_*
   const SETTINGS_COLUMNS = [
-    'id', 'admin_phone', 'admin_calendar_email', 'background_image_url', 'bank_account', 'bank_branch', 'bank_name',
-    'bit_business_name', 'bit_payment_url', 'bit_phone_number', 'business_address',
-    'business_logo_url', 'business_name', 'business_phone', 'deposit_fixed_amount',
-    'deposit_percentage', 'google_calendar_id', 'is_deposit_active', 'max_advance_days',
-    'min_advance_hours', 'payment_bank_enabled', 'payment_bit_enabled', 'payment_cash_enabled',
-    'payment_credit_enabled', 'payment_stripe_enabled', 'primary_color', 'secondary_color',
-    'send_confirmation_sms', 'send_reminder_hours', 'slot_duration_min', 'stripe_publishable_key',
-    // stripe_secret_key מוחרג — לא נשלח לדפדפן, מטופל ב-SecretKeyField בנפרד
+    'id', 'admin_phone', 'admin_calendar_email', 'background_image_url',
+    'business_address',
+    'business_logo_url', 'business_name', 'business_phone',
+    'google_calendar_id',
+    'max_advance_days', 'min_advance_hours',
+    'primary_color', 'secondary_color',
+    'send_confirmation_sms', 'send_reminder_hours', 'slot_duration_min',
     'whatsapp_api_token', 'whatsapp_float_number', 'working_days',
     'working_hours_end', 'working_hours_start',
     'instagram_url', 'facebook_url', 'show_instagram', 'show_facebook',
@@ -217,63 +217,6 @@ export default function AdminSettings() {
 
                 <p className="text-xs text-muted-foreground">הזן את הקישורים המלאים לפרופילים שלך. הלוגואים יופיעו בדף הבית רק אם הפעלת אותם.</p>
               </div>
-            </Section>
-          </>
-        )}
-
-        {activeTab === 'payment' && (
-          <>
-            <Section title="אמצעי תשלום">
-              <ToggleRow label="💵 מזומן" checked={form.payment_cash_enabled} onChange={(v) => update('payment_cash_enabled', v)} />
-              <ToggleRow label="🏦 העברה בנקאית" checked={form.payment_bank_enabled} onChange={(v) => update('payment_bank_enabled', v)} />
-              <ToggleRow label="📱 Bit" checked={form.payment_bit_enabled} onChange={(v) => update('payment_bit_enabled', v)} />
-              <ToggleRow label="💳 אשראי (Stripe)" checked={form.payment_stripe_enabled} onChange={(v) => update('payment_stripe_enabled', v)} />
-            </Section>
-
-            {form.payment_bank_enabled && (
-              <Section title="פרטי חשבון בנק">
-                <Field label="שם בנק" value={form.bank_name} onChange={(v) => update('bank_name', v)} />
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="סניף" value={form.bank_branch} onChange={(v) => update('bank_branch', v)} />
-                  <Field label="מספר חשבון" value={form.bank_account} onChange={(v) => update('bank_account', v)} />
-                </div>
-              </Section>
-            )}
-
-            {form.payment_bit_enabled && (
-              <Section title="פרטי Bit">
-                <Field label="מספר טלפון Bit" value={form.bit_phone_number} onChange={(v) => update('bit_phone_number', v)} />
-                <Field label="שם עסק ב-Bit" value={form.bit_business_name} onChange={(v) => update('bit_business_name', v)} />
-                <Field label="קישור תשלום Bit (URL)" value={form.bit_payment_url} onChange={(v) => update('bit_payment_url', v)} dir="ltr" />
-                <p className="text-xs text-muted-foreground">הזן את הקישור לתשלום ב-Bit. כשהלקוח ילחץ על כפתור Bit, הוא יועבר לקישור זה.</p>
-              </Section>
-            )}
-
-            {form.payment_stripe_enabled && (
-              <Section title="פרטי Stripe">
-                <Field label="Publishable Key" value={form.stripe_publishable_key} onChange={(v) => update('stripe_publishable_key', v)} dir="ltr" type="password" />
-                <p className="text-xs text-muted-foreground">המפתח הציבורי מ-Stripe Dashboard. מתחיל ב-pk_</p>
-                {/* SecretKeyField — מנהל את stripe_secret_key באופן מבודד ומאובטח:
-                    1. לא מציג את הערך הקיים (גם אם נשמר בעבר)
-                    2. שומר ישירות למסד הנתונים רק כשהמשתמש מקיש ערך חדש ולוחץ "שמור"
-                    3. לעולם לא עובר דרך ה-form state שמגיע לדפדפן */}
-                <SecretKeyField settingsId={form.id} />
-                <p className="text-xs text-muted-foreground mt-2">
-                  <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                    קבל מפתחות מ-Stripe Dashboard →
-                  </a>
-                </p>
-              </Section>
-            )}
-
-            <Section title="מקדמה">
-              <ToggleRow label="דרוש מקדמה" checked={form.is_deposit_active} onChange={(v) => update('is_deposit_active', v)} />
-              {form.is_deposit_active && (
-                <div className="grid grid-cols-2 gap-3 mt-3">
-                  <Field label="סכום קבוע (₪)" value={form.deposit_fixed_amount} onChange={(v) => update('deposit_fixed_amount', Number(v))} type="number" />
-                  <Field label="אחוז (%)" value={form.deposit_percentage} onChange={(v) => update('deposit_percentage', Number(v))} type="number" />
-                </div>
-              )}
             </Section>
           </>
         )}
@@ -738,84 +681,6 @@ function BackgroundImageUploadField({ value, onChange }: { value: string; onChan
           {value ? 'החלף תמונה' : 'העלה תמונת רקע'}
         </button>
       </div>
-    </div>
-  );
-}
-
-/**
- * SecretKeyField
- * --------------
- * קומפוננטה מבודדת לניהול stripe_secret_key.
- *
- * עקרונות האבטחה שמיושמים כאן:
- *   1. הערך הקיים לעולם לא נשלח לדפדפן — השדה תמיד מתחיל ריק.
- *      במקומו מוצג placeholder שמסמן "הזן מפתח חדש".
- *   2. השמירה נעשית ישירות למסד הנתונים — עוקפת את ה-form הכללי
- *      כדי שהמפתח לא יגיע לשום state אחר.
- *   3. ה-update כולל .eq('id', settingsId) — הגנה כפולה שמבטיחה
- *      שרק הרשומה הנכונה תתעדכן.
- *   4. לאחר שמירה מוצלחת — השדה מתרוקן מחדש (לא נשמר ב-state).
- */
-function SecretKeyField({ settingsId }: { settingsId: string | undefined }) {
-  const [newKey, setNewKey] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-
-  const handleSave = async () => {
-    // ולידציה בסיסית: מפתח Stripe Secret חייב להתחיל ב-sk_
-    if (!newKey.startsWith('sk_')) {
-      toast.error('Secret Key לא תקין — חייב להתחיל ב-sk_');
-      return;
-    }
-    if (!settingsId) {
-      toast.error('לא ניתן לשמור: settings ID חסר');
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      const { error } = await supabase
-        .from('settings')
-        .update({ stripe_secret_key: newKey })
-        .eq('id', settingsId);
-
-      if (error) throw error;
-
-      toast.success('Secret Key עודכן בהצלחה');
-      setNewKey(''); // ניקוי מיידי — לא שומרים בזיכרון יותר מהנדרש
-    } catch (err: any) {
-      console.error('[SecretKeyField] Save error:', err);
-      toast.error(`שגיאה בשמירת Secret Key: ${err?.message ?? 'שגיאה לא ידועה'}`);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Label className="text-sm font-semibold">Secret Key</Label>
-      <div className="flex gap-2">
-        <Input
-          type="password"
-          value={newKey}
-          onChange={(e) => setNewKey(e.target.value)}
-          placeholder="הזן מפתח חדש (מתחיל ב-sk_)..."
-          className="h-10 rounded-xl flex-1"
-          dir="ltr"
-          autoComplete="off"
-        />
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={isSaving || !newKey}
-          className="h-10 px-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-semibold transition-all disabled:opacity-50 flex items-center gap-2 text-sm whitespace-nowrap"
-        >
-          {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          שמור מפתח
-        </button>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        🔒 המפתח הסודי נשמר ישירות ולעולם אינו מוצג מחדש. השאר ריק אם אינך רוצה לשנות.
-      </p>
     </div>
   );
 }

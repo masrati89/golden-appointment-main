@@ -61,6 +61,18 @@ const SAFE_SELECT = [
   'facebook_url',
   'show_instagram',
   'show_facebook',
+  // ── Payment gateway (BYOG) ──────────────────────────────────────────
+  // Admin-entered credentials needed to pre-populate the Payments settings page.
+  // morning_api_key / morning_api_secret / meshulam_api_token are treated like
+  // whatsapp_api_token: sensitive but required in the admin UI for display/edit.
+  'is_payment_required',
+  'payment_type',
+  'deposit_amount',
+  'payment_gateway',
+  'morning_api_key',
+  'morning_api_secret',
+  'meshulam_page_code',
+  'meshulam_api_token',
 ].join(',');
 
 export const useSettings = (businessId?: string | null) => {
