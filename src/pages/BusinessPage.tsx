@@ -26,6 +26,17 @@ function WazeIcon({ className }: { className?: string }) {
   );
 }
 
+/**
+ * Converts any Instagram post/reel URL to its embeddable form.
+ * Strips query-params (e.g. ?igsh=…) that cause X-Frame-Options blocks,
+ * then appends /embed/ so Instagram allows the iframe.
+ * e.g. https://www.instagram.com/p/ABC123/?igsh=xyz → https://www.instagram.com/p/ABC123/embed/
+ */
+function toInstagramEmbedUrl(url: string): string {
+  const clean = url.split('?')[0].replace(/\/+$/, '');
+  return `${clean}/embed/`;
+}
+
 /** Smart Waze deep-link: raw address → waze.com search; existing Waze/waze:// URL → pass through */
 function getWazeHref(value: string): string {
   if (
@@ -104,15 +115,15 @@ function BusinessPageContent() {
       <main
         className="flex-1 flex flex-col justify-center w-full px-4 sm:px-6 md:px-8 overflow-y-auto z-10 relative"
         style={{
-          paddingTop: 'max(calc(env(safe-area-inset-top, 0px) + 3.5rem), 3.5rem)',
-          paddingBottom: 'max(calc(env(safe-area-inset-bottom, 0px) + 7rem), 7rem)',
+          paddingTop: 'max(calc(env(safe-area-inset-top, 0px) + 2rem), 2rem)',
+          paddingBottom: 'max(calc(env(safe-area-inset-bottom, 0px) + 6rem), 6rem)',
         }}
       >
-        <div className="w-full max-w-7xl mx-auto flex flex-col justify-center items-center gap-y-6 md:gap-y-8 py-4">
+        <div className="w-full max-w-7xl mx-auto flex flex-col justify-center items-center gap-y-3 md:gap-y-4 py-1">
 
           {/* Hero */}
           <motion.section
-            className="text-center space-y-2 flex-shrink-0 mb-6"
+            className="text-center space-y-1 flex-shrink-0"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
@@ -121,21 +132,21 @@ function BusinessPageContent() {
               <img
                 src={settings.business_logo_url}
                 alt={business?.name || 'לוגו'}
-                className="h-16 md:h-20 mx-auto object-contain mb-2 max-w-md"
+                className="h-12 md:h-16 mx-auto object-contain mb-1 max-w-md"
                 loading="lazy"
               />
             ) : (
-              <h1 className={`text-3xl md:text-4xl lg:text-5xl font-bold tracking-wide mx-auto max-w-md ${bgImageUrl ? 'text-white' : 'text-foreground'}`}>
+              <h1 className={`text-2xl md:text-3xl font-bold tracking-wide mx-auto max-w-md ${bgImageUrl ? 'text-white' : 'text-foreground'}`}>
                 {business?.name || settings?.business_name || 'מכון היופי שלך'}
               </h1>
             )}
-            <p className={`text-sm md:text-base mx-auto max-w-md ${bgImageUrl ? 'text-white/80' : 'text-muted-foreground'}`}>
+            <p className={`text-xs md:text-sm mx-auto max-w-md ${bgImageUrl ? 'text-white/80' : 'text-muted-foreground'}`}>
               חווית הזמנה פרימיום
             </p>
           </motion.section>
 
           {/* Steps */}
-          <section className="flex flex-col md:flex-row items-center justify-center gap-y-4 md:gap-y-0 flex-shrink-0 px-2 w-full py-4">
+          <section className="flex flex-col md:flex-row items-center justify-center gap-y-1 md:gap-y-0 flex-shrink-0 px-2 w-full py-1">
             {steps.map((step, i) => {
               const isLast = i === steps.length - 1;
               return (
@@ -144,18 +155,18 @@ function BusinessPageContent() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: i * 0.15, ease: 'easeOut' }}
-                    className="flex flex-col items-center text-center max-w-xs px-3"
+                    className="flex flex-col items-center text-center max-w-xs px-2"
                   >
-                    <span className={`text-xs font-serif font-light mb-1 ${bgImageUrl ? 'text-[#D4B896]/60' : 'text-[#D4B896]/50'}`}>
+                    <span className={`text-xs font-serif font-light mb-0.5 ${bgImageUrl ? 'text-[#D4B896]/60' : 'text-[#D4B896]/50'}`}>
                       {String(i + 1).padStart(2, '0')}
                     </span>
-                    <div className="flex items-center gap-2 mb-2">
-                      <h3 className={`text-lg md:text-xl font-bold ${bgImageUrl ? 'text-white' : 'text-[#2D3440]'}`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className={`text-base md:text-lg font-bold ${bgImageUrl ? 'text-white' : 'text-[#2D3440]'}`}>
                         {step.title}
                       </h3>
-                      <step.icon size={22} className="text-[#B8956A]" strokeWidth={1.5} />
+                      <step.icon size={18} className="text-[#B8956A]" strokeWidth={1.5} />
                     </div>
-                    <p className={`text-sm leading-relaxed ${bgImageUrl ? 'text-white/70' : 'text-[#2D3440]/60'}`}>
+                    <p className={`text-xs leading-snug ${bgImageUrl ? 'text-white/70' : 'text-[#2D3440]/60'}`}>
                       {step.description}
                     </p>
                   </motion.div>
@@ -165,10 +176,10 @@ function BusinessPageContent() {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ duration: 0.4, delay: i * 0.15 + 0.3 }}
-                      className="flex items-center justify-center my-4 md:my-0 md:mx-6"
+                      className="flex items-center justify-center my-1 md:my-0 md:mx-6"
                     >
-                      <ArrowRight className="hidden md:block w-5 h-5 text-[#B8956A]" strokeWidth={2} />
-                      <ArrowDown className="md:hidden w-5 h-5 text-[#B8956A]" strokeWidth={2} />
+                      <ArrowRight className="hidden md:block w-4 h-4 text-[#B8956A]" strokeWidth={2} />
+                      <ArrowDown className="md:hidden w-4 h-4 text-[#B8956A]" strokeWidth={2} />
                     </motion.div>
                   )}
                 </div>
@@ -178,7 +189,7 @@ function BusinessPageContent() {
 
           {/* CTA */}
           <motion.div
-            className="text-center flex-shrink-0 mt-4"
+            className="text-center flex-shrink-0 mt-1"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3, delay: 0.5 }}
@@ -207,7 +218,7 @@ function BusinessPageContent() {
                 {((settings as any).custom_images ?? []).map((url: string, i: number) => (
                   <div
                     key={`img-${i}`}
-                    className="flex-shrink-0 w-64 h-64 snap-center rounded-xl overflow-hidden border border-white/20 shadow-md"
+                    className="flex-shrink-0 w-52 h-52 snap-center rounded-xl overflow-hidden border border-white/20 shadow-md"
                   >
                     <img
                       src={url}
@@ -218,25 +229,23 @@ function BusinessPageContent() {
                   </div>
                 ))}
                 {((settings as any).instagram_urls ?? [])
-                  .filter((url: string) => url.startsWith('https://www.instagram.com/'))
-                  .map((url: string, i: number) => {
-                    const embedUrl = url.replace(/\/?$/, '/embed/');
-                    return (
-                      <div
-                        key={`ig-${i}`}
-                        className="flex-shrink-0 w-64 h-64 snap-center rounded-xl overflow-hidden border border-white/20 shadow-md bg-white"
-                      >
-                        <iframe
-                          src={embedUrl}
-                          className="w-full h-full"
-                          frameBorder="0"
-                          scrolling="no"
-                          loading="lazy"
-                          title={`Instagram ${i + 1}`}
-                        />
-                      </div>
-                    );
-                  })}
+                  .filter((url: string) => url.includes('instagram.com/p/') || url.includes('instagram.com/reel/'))
+                  .map((url: string, i: number) => (
+                    <div
+                      key={`ig-${i}`}
+                      className="flex-shrink-0 w-52 h-52 snap-center rounded-xl overflow-hidden border border-white/20 shadow-md bg-white"
+                    >
+                      <iframe
+                        src={toInstagramEmbedUrl(url)}
+                        className="w-full h-full"
+                        frameBorder="0"
+                        scrolling="no"
+                        allowTransparency={true}
+                        loading="lazy"
+                        title={`Instagram ${i + 1}`}
+                      />
+                    </div>
+                  ))}
               </div>
             </motion.section>
           )}
