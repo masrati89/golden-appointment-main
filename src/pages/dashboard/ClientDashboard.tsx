@@ -5,6 +5,7 @@ import { format, isAfter, startOfDay } from 'date-fns';
 import { useClientAuth } from '@/contexts/ClientAuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { CalendarClock, LogOut, Sparkles, Image as ImageIcon, Clock, CheckCircle, XCircle, Home } from 'lucide-react';
+import { businessHomeUrl } from '@/lib/businessSlug';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { BookingCardSkeleton } from '@/components/skeletons/BookingCardSkeleton';
@@ -172,11 +173,11 @@ export default function ClientDashboard() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => navigate('/')}
+                onClick={() => navigate(businessHomeUrl())}
                 className="gap-2"
               >
                 <Home className="w-4 h-4" />
-                <span className="hidden sm:inline">דף הבית</span>
+                <span className="hidden sm:inline">חזרה לעסק</span>
               </Button>
               <Button
                 variant="ghost"

@@ -7,10 +7,11 @@
  * כל hook שמשתמש ב-business_id (useSettings, useServices וכו')
  * מקבל אותו מכאן — מקור אמת אחד לכל העמוד.
  */
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { saveBusinessSlug } from '@/lib/businessSlug';
 
 interface Business {
   id: string;
@@ -44,6 +45,11 @@ async function fetchBusinessBySlug(slug: string): Promise<Business | null> {
 export function BusinessProvider({ children }: { children: ReactNode }) {
   const { slug } = useParams<{ slug: string }>();
 
+  // Persist the slug so logout and home buttons can redirect back to this business.
+  useEffect(() => {
+    if (slug) saveBusinessSlug(slug);
+  }, [slug]);
+
   const { data: business, isLoading, isError } = useQuery({
     queryKey: ['business', slug],
     queryFn: () => fetchBusinessBySlug(slug!),
@@ -51,6 +57,17 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
     staleTime: 10 * 60 * 1000, // 10 דקות — נתוני עסק משתנים לעיתים רחוקות
     retry: 1,
   });
+
+  // Update browser tab title once business data is available.
+  // Must be AFTER useQuery so `business` is already declared.
+  useEffect(() => {
+    if (business?.name) {
+      document.title = `${business.name} | הזמנת תור`;
+    }
+    return () => {
+      document.title = 'זימון תורים';
+    };
+  }, [business?.name]);
 
   return (
     <BusinessContext.Provider

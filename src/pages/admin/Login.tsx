@@ -4,10 +4,11 @@ import { motion } from 'framer-motion';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import { AppLoader } from '@/components/AppLoader';
 import { supabase } from '@/integrations/supabase/client';
-import { Lock, Eye, EyeOff, AlertCircle, Loader2, Mail } from 'lucide-react';
+import { Lock, Eye, EyeOff, AlertCircle, Loader2, Mail, ArrowRight } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import BottomNav from '@/components/BottomNav';
+import { businessHomeUrl } from '@/lib/businessSlug';
 
 // Google icon SVG component
 function GoogleIcon() {
@@ -121,6 +122,15 @@ export default function AdminLogin() {
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5, ease: 'easeInOut' }}
       >
+        <button
+          type="button"
+          onClick={() => navigate(businessHomeUrl())}
+          className="text-sm text-gray-500 hover:text-gray-800 flex items-center gap-2 mb-6 transition-colors w-fit"
+        >
+          <ArrowRight className="w-4 h-4" />
+          חזרה לדף הבית
+        </button>
+
         <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-primary/10 flex items-center justify-center">
           <Lock className="w-10 h-10 text-primary" />
         </div>

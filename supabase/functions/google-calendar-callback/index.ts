@@ -1,10 +1,38 @@
+/**
+ * google-calendar-callback — OAuth token exchange (Frontend Proxy pattern)
+ * ─────────────────────────────────────────────────────────────────────────
+ * JWT Verification: ON  ← Supabase platform validates the Bearer token.
+ *
+ * Flow (see GoogleCallback.tsx for the frontend side):
+ *  1. User clicks "Connect Google Calendar" → redirected to Google consent screen
+ *  2. Google redirects the browser to /admin/auth/google-callback?code=...&state=...
+ *  3. That frontend route calls supabase.functions.invoke('google-calendar-callback',
+ *       { body: { code, state } })
+ *     supabase.functions.invoke automatically attaches the admin's JWT as Bearer token.
+ *  4. This function:
+ *       a. Gets admin_user_id from the verified JWT
+ *       b. Validates the state CSRF timestamp
+ *       c. Exchanges code → refresh_token with Google
+ *       d. Saves refresh_token via set_google_calendar_tokens RPC (tenant-scoped)
+ *       e. Returns { success: true }
+ *  5. Frontend navigates to /admin/settings?connected=1
+ *
+ * Deploy (no --no-verify-jwt needed):
+ *   npx supabase functions deploy google-calendar-callback
+ *
+ * Google Cloud Console:
+ *   Authorized redirect URIs must include:
+ *     http://localhost:8080/admin/auth/google-callback   (dev)
+ *     https://<your-domain>/admin/auth/google-callback  (prod)
+ */
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 serve(async (req) => {
@@ -12,65 +40,86 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const url = new URL(req.url);
-  const code = url.searchParams.get("code");
-  const state = url.searchParams.get("state"); // optional: redirect URL back to app
-  const errorParam = url.searchParams.get("error");
+  const json = (data: unknown, status = 200) =>
+    new Response(JSON.stringify(data), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
+  const supabaseUrl  = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey   = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const clientId     = Deno.env.get("GOOGLE_CLIENT_ID");
   const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
 
-  // H-4: Parse base64-JSON state for CSRF validation and admin user identification.
-  // State format: btoa(JSON.stringify({ origin, admin_user_id, ts }))
-  let redirectBase: string | null = null;
-  let adminUserId: string | null = null;
-
-  if (state) {
-    try {
-      const parsed = JSON.parse(atob(state));
-      if (parsed.origin) {
-        try { redirectBase = new URL(parsed.origin).origin; } catch { /* ignore bad origin */ }
-      }
-      // CSRF: reject state older than 10 minutes
-      if (!parsed.ts || Date.now() - parsed.ts > 10 * 60 * 1000) {
-        console.error("Google OAuth: state timestamp missing or expired (CSRF protection)");
-        const failUrl = redirectBase ? `${redirectBase}/admin/settings?connected=0` : "/admin/settings?connected=0";
-        return Response.redirect(failUrl, 302);
-      }
-      adminUserId = parsed.admin_user_id ?? null;
-    } catch {
-      // Not base64-JSON — reject (old plain-URL state format is no longer accepted)
-      console.error("Google OAuth: invalid state parameter format");
-      return Response.redirect("/admin/settings?connected=0", 302);
-    }
+  // ── Identify the authenticated admin from the JWT ──────────────────────
+  // Supabase platform has already verified the JWT signature at this point.
+  // We use getUser() to resolve the user ID rather than trusting a self-decoded
+  // payload, which provides a second layer of validation.
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) {
+    return json({ success: false, error: "Authorization required" }, 401);
   }
 
-  if (!adminUserId) {
-    console.error("Google OAuth: admin_user_id missing from state");
-    const failUrl = redirectBase ? `${redirectBase}/admin/settings?connected=0` : "/admin/settings?connected=0";
-    return Response.redirect(failUrl, 302);
+  const supabase = createClient(supabaseUrl, serviceKey);
+  const { data: { user }, error: authErr } = await supabase.auth.getUser(
+    authHeader.replace("Bearer ", "")
+  );
+  if (authErr || !user) {
+    console.error("[google-calendar-callback] Auth failed:", authErr?.message);
+    return json({ success: false, error: "Unauthorized" }, 401);
   }
+  const adminUserId = user.id;
 
-  const defaultRedirect = redirectBase ? `${redirectBase}/admin/settings?connected=1` : "/admin/settings?connected=1";
-  const failRedirect = redirectBase ? `${redirectBase}/admin/settings?connected=0` : "/admin/settings?connected=0";
-
-  if (errorParam) {
-    const redirectUrl = redirectBase ? `${redirectBase}/admin/settings?connected=0&error=${encodeURIComponent(errorParam)}` : failRedirect;
-    return Response.redirect(redirectUrl, 302);
+  // ── Parse POST body ────────────────────────────────────────────────────
+  let code: string | undefined;
+  let state: string | undefined;
+  let redirectUri: string | undefined;
+  try {
+    const body = await req.json();
+    code        = body.code;
+    state       = body.state;
+    redirectUri = body.redirect_uri; // sent explicitly by the frontend
+  } catch {
+    return json({ success: false, error: "Invalid JSON body" }, 400);
   }
 
   if (!code) {
-    return Response.redirect(failRedirect, 302);
+    return json({ success: false, error: "Missing code" }, 400);
+  }
+
+  // ── CSRF: validate state timestamp ────────────────────────────────────
+  if (state) {
+    try {
+      const parsed = JSON.parse(atob(state));
+      if (!parsed.ts || Date.now() - parsed.ts > 10 * 60 * 1000) {
+        console.error("[google-calendar-callback] State timestamp missing or expired");
+        return json({ success: false, error: "OAuth state expired — please try again" }, 400);
+      }
+      // Prefer redirect_uri embedded in state (set at the moment the OAuth was initiated)
+      // over the one derived at callback time — eliminates any port/origin drift.
+      if (!redirectUri && parsed.redirect_uri) {
+        redirectUri = parsed.redirect_uri;
+      }
+    } catch {
+      console.error("[google-calendar-callback] Invalid state parameter format");
+      return json({ success: false, error: "Invalid state parameter" }, 400);
+    }
   }
 
   if (!clientId || !clientSecret) {
-    console.error("Google OAuth: GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not set");
-    return Response.redirect(failRedirect, 302);
+    console.error("[google-calendar-callback] GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not set");
+    return json({ success: false, error: "Server misconfiguration" }, 500);
   }
 
-  const callbackUrl = `${supabaseUrl}/functions/v1/google-calendar-callback`;
+  if (!redirectUri) {
+    console.error("[google-calendar-callback] redirect_uri missing from body and state");
+    return json({ success: false, error: "Missing redirect_uri" }, 400);
+  }
+
+  // ── Exchange authorization code → refresh token ───────────────────────
+  // redirect_uri must exactly match the value used in the authorization request.
+  console.log(`[google-calendar-callback] Exchanging code for admin ${adminUserId.slice(0, 8)}... | redirect_uri: ${redirectUri}`);
+
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -78,35 +127,47 @@ serve(async (req) => {
       code,
       client_id: clientId,
       client_secret: clientSecret,
-      redirect_uri: callbackUrl,
+      redirect_uri: redirectUri,
       grant_type: "authorization_code",
     }),
   });
 
   if (!tokenRes.ok) {
     const errText = await tokenRes.text();
-    console.error("Google token exchange failed:", errText);
-    return Response.redirect(failRedirect, 302);
+    console.error("[google-calendar-callback] Token exchange failed:", tokenRes.status, errText);
+    // Use 400 so the Supabase JS client surfaces the body in fnError.context
+    return json({ success: false, error: `Google token exchange failed (${tokenRes.status}): ${errText}` }, 400);
   }
 
   const tokenData = await tokenRes.json();
   const refreshToken = tokenData.refresh_token;
+
   if (!refreshToken) {
-    console.error("Google did not return refresh_token (ensure prompt=consent and access_type=offline)");
-    return Response.redirect(failRedirect, 302);
+    console.error("[google-calendar-callback] No refresh_token returned — ensure prompt=consent and access_type=offline");
+    return json({
+      success: false,
+      error: "Google did not return a refresh token. Please disconnect and reconnect to grant offline access.",
+    }, 400);
   }
 
-  const supabase = createClient(supabaseUrl, supabaseKey);
-  // Pass admin_user_id so the RPC updates only the correct tenant's settings row.
-  const { error } = await supabase.rpc("set_google_calendar_tokens", {
+  // ── Save tokens scoped to this admin's settings row (tenant-isolated) ──
+  // Use the RPC rather than a direct .from().update() — the RPC runs inside
+  // Postgres and doesn't require PostgREST to have the column in its schema
+  // cache (which can be stale). Direct REST updates hit PGRST204 when the
+  // column cache lags behind the actual schema.
+  const { error: rpcErr } = await supabase.rpc("set_google_calendar_tokens", {
     p_refresh_token: refreshToken,
     p_admin_user_id: adminUserId,
   });
 
-  if (error) {
-    console.error("set_google_calendar_tokens failed:", error);
-    return Response.redirect(failRedirect, 302);
+  if (rpcErr) {
+    console.error("[google-calendar-callback] set_google_calendar_tokens RPC failed:", rpcErr.message, rpcErr.code);
+    return json({
+      success: false,
+      error: `Failed to save calendar tokens: ${rpcErr.message} (code: ${rpcErr.code})`,
+    }, 500);
   }
 
-  return Response.redirect(defaultRedirect, 302);
+  console.log(`[google-calendar-callback] Google Calendar connected for admin ${adminUserId.slice(0, 8)}...`);
+  return json({ success: true });
 });

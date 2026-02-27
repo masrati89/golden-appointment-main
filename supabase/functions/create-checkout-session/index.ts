@@ -112,7 +112,7 @@ serve(async (req) => {
 
         // ── Step 1: obtain a short-lived JWT from Morning ──────────────
         // SANDBOX mode — switch to https://api.greeninvoice.co.il for production
-        const morningBase = "https://sandbox.greeninvoice.co.il/api/v1";
+        const morningBase = "https://sandbox.d.greeninvoice.co.il/api/v1";
         // Standard browser headers to pass Morning's Cloudflare WAF
         const morningHeaders = {
           "Content-Type": "application/json",

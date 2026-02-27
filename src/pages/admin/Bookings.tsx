@@ -112,27 +112,28 @@ export default function BookingsManagement() {
 
   const deleteBooking = useMutation({
     mutationFn: async (booking_id: string) => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) throw new Error('לא מחובר — נסה להתחבר מחדש');
-      const { data, error } = await supabase.functions.invoke('delete-booking-with-calendar', {
-        body: { booking_id },
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
+      if (!businessId) throw new Error('מזהה עסק חסר');
+      // Delete directly via REST API — the bookings_delete RLS policy
+      // (business_id = get_my_business_id()) enforces ownership server-side.
+      // The .eq('business_id', businessId) double-guards against IDOR.
+      const { error } = await supabase
+        .from('bookings')
+        .delete()
+        .eq('id', booking_id)
+        .eq('business_id', businessId);
       if (error) throw error;
-      if (!data?.success) {
-        throw new Error(data?.error || 'Failed to delete booking');
-      }
       return booking_id;
     },
     onSuccess: (booking_id) => {
-      queryClient.setQueryData(['admin-bookings', statusFilter, dateFilter], (old: any[] | undefined) =>
-        old ? old.filter((b) => b.id !== booking_id) : []
+      queryClient.setQueryData(
+        ['admin-bookings', statusFilter, dateFilter, businessId],
+        (old: any[] | undefined) => (old ? old.filter((b) => b.id !== booking_id) : [])
       );
       setDeleteDialogBookingId(null);
-      toast.success('Booking and Google Calendar event deleted.');
+      toast.success('התור נמחק בהצלחה');
     },
     onError: (error: any) => {
-      toast.error(error?.message || 'Failed to delete appointment.');
+      toast.error(error?.message || 'שגיאה במחיקת התור');
     },
   });
 

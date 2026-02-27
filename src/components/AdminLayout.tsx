@@ -11,18 +11,20 @@ import {
   LogOut,
   Ban,
   Heart,
+  CreditCard,
   MoreHorizontal,
   Home,
 } from 'lucide-react';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'לוח בקרה', path: '/admin/dashboard' },
-  { icon: Calendar, label: 'תורים', path: '/admin/bookings' },
-  { icon: Sparkles, label: 'שירותים', path: '/admin/services' },
-  { icon: Ban, label: 'חסימות', path: '/admin/blocked' },
-  { icon: Settings, label: 'הגדרות', path: '/admin/settings' },
-  { icon: BarChart3, label: 'דוחות', path: '/admin/analytics' },
-  { icon: Heart,    label: 'נאמנות', path: '/admin/loyalty' },
+  { icon: Calendar,        label: 'תורים',    path: '/admin/bookings' },
+  { icon: Sparkles,        label: 'שירותים',  path: '/admin/services' },
+  { icon: Ban,             label: 'חסימות',   path: '/admin/blocked' },
+  { icon: Settings,        label: 'הגדרות',   path: '/admin/settings' },
+  { icon: BarChart3,       label: 'דוחות',    path: '/admin/analytics' },
+  { icon: Heart,           label: 'נאמנות',   path: '/admin/loyalty' },
+  { icon: CreditCard,      label: 'תשלומים',  path: '/admin/payments' },
 ];
 
 // Bottom nav shows first 4 items + "more" toggle for the rest

@@ -5,7 +5,11 @@ import { toast } from 'sonner';
 import type { User } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/button';
 
-const GOOGLE_AUTH_CALLBACK_URL = 'https://ylhazxbkaqhmhnbjopdj.supabase.co/functions/v1/google-calendar-callback';
+// Frontend callback route — Google redirects here so the page can attach the
+// admin JWT when calling the Edge Function (keeps Verify JWT = ON).
+function googleCallbackUrl() {
+  return `${window.location.origin}/admin/auth/google-callback`;
+}
 
 // Google icon SVG component
 function GoogleIcon() {
@@ -42,18 +46,20 @@ export function GoogleSyncStatus({
       return;
     }
 
-    // H-4: Include timestamp for CSRF validation in the callback.
+    // Embed redirect_uri in state so the edge function uses the EXACT same value
+    // that was sent to Google — any mismatch causes invalid_grant.
+    const redirectUri = googleCallbackUrl();
     const state = btoa(
       JSON.stringify({
         origin: window.location.origin,
-        admin_user_id: user.id,
+        redirect_uri: redirectUri,
         ts: Date.now(),
       })
     );
 
     const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     authUrl.searchParams.set('client_id', import.meta.env.VITE_GOOGLE_CLIENT_ID || '');
-    authUrl.searchParams.set('redirect_uri', GOOGLE_AUTH_CALLBACK_URL);
+    authUrl.searchParams.set('redirect_uri', googleCallbackUrl());
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('scope', 'https://www.googleapis.com/auth/calendar');
     authUrl.searchParams.set('access_type', 'offline');

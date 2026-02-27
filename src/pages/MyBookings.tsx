@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useClientAuth } from '@/contexts/ClientAuthContext';
+import { businessHomeUrl } from '@/lib/businessSlug';
 
 interface BookingWithService {
   id: string;
@@ -21,7 +22,7 @@ interface BookingWithService {
 
 const MyBookings = () => {
   const navigate = useNavigate();
-  const { user, signOut } = useClientAuth();
+  const { user, logout } = useClientAuth();
   const { data: bookings = [], isLoading: loading } = useQuery({
     queryKey: ['my-bookings', user?.id],
     enabled: !!user?.id,
@@ -38,8 +39,9 @@ const MyBookings = () => {
   });
 
   const handleLogout = async () => {
-    await signOut();
-    navigate('/');
+    // logout() calls signOut + redirects via window.location.href to the business page
+    await logout();
+    navigate(businessHomeUrl());
   };
 
   const today = startOfDay(new Date());

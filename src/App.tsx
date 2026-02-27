@@ -31,6 +31,8 @@ const AdminSettings     = lazy(() => import("./pages/admin/Settings"));
 const AdminAnalytics    = lazy(() => import("./pages/admin/Analytics"));
 const BlockedSlots      = lazy(() => import("./pages/admin/BlockedSlots"));
 const AdminLoyalty      = lazy(() => import("./pages/admin/Loyalty"));
+const AdminPayments     = lazy(() => import("./pages/admin/Payments"));
+const GoogleCallback    = lazy(() => import("./pages/admin/GoogleCallback"));
 const LoyaltyPage       = lazy(() => import("./pages/LoyaltyPage"));
 const CustomerRegister  = lazy(() => import("./pages/CustomerRegister"));
 const LandingPage       = lazy(() => import("./pages/LandingPage"));
@@ -127,6 +129,12 @@ const App = () => (
 
                     {/* ─── אדמין ───────────────────────────────────────── */}
                     <Route path="/admin/login" element={<AdminLogin />} />
+                    {/* Google OAuth callback — outside AdminLayout (no sidebar needed).
+                      * Must be inside AdminAuthProvider (wraps all admin routes) and
+                      * ProtectedRoute (user must be logged in to attach a valid JWT). */}
+                    <Route path="/admin/auth/google-callback" element={
+                      <ProtectedRoute><GoogleCallback /></ProtectedRoute>
+                    } />
                     <Route path="/admin" element={
                       <ProtectedRoute><AdminLayout /></ProtectedRoute>
                     }>
@@ -137,6 +145,7 @@ const App = () => (
                       <Route path="analytics"  element={<AdminAnalytics />} />
                       <Route path="blocked"    element={<BlockedSlots />} />
                       <Route path="loyalty"    element={<AdminLoyalty />} />
+                      <Route path="payments"   element={<AdminPayments />} />
                     </Route>
 
                     <Route

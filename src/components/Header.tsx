@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { useSettings } from '@/hooks/useSettings';
 import { useClientAuth } from '@/contexts/ClientAuthContext';
 import { useBusinessSafe } from '@/contexts/BusinessContext';
+import { businessHomeUrl } from '@/lib/businessSlug';
 
 const Header = () => {
   const navigate = useNavigate();
-  const { business } = useBusinessSafe();
-  const { data: settings } = useSettings();
+  const { business, businessId } = useBusinessSafe();
+  const { data: settings } = useSettings(businessId);
   const { isAuthenticated, user } = useClientAuth();
   const logoUrl = settings?.business_logo_url;
 
@@ -65,13 +66,13 @@ const Header = () => {
           </button>
           )}
 
-          {/* Home Button */}
+          {/* Home Button — navigates to the current business page, or "/" fallback */}
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate(business?.slug ? `/b/${business.slug}` : businessHomeUrl())}
             className="flex items-center gap-2 min-w-[40px] min-h-[40px] justify-center rounded-lg text-muted-foreground hover:text-primary transition-colors"
             aria-label="דף הבית"
           >
-              <Home className="w-5 h-5" />
+            <Home className="w-5 h-5" />
           </button>
         </div>
       </div>

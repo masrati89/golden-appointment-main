@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { User } from '@supabase/supabase-js';
+import { businessHomeUrl } from '@/lib/businessSlug';
 
 interface ClientAuthContextType {
   isAuthenticated: boolean;
@@ -126,19 +127,19 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    const dest = businessHomeUrl(); // capture before signOut clears any state
     try {
       await supabase.auth.signOut();
       setUser(null);
       setIsAuthenticated(false);
-      // Use window.location.href for full page reload to clear all state
-      // Redirect to home page (/) instead of /login to avoid 404s
-      window.location.href = '/';
+      // Full page reload clears all React state; redirect to the business page
+      // the user was on, or "/" if no business slug has been stored yet.
+      window.location.href = dest;
     } catch (error) {
       console.error('Logout error:', error);
-      // Even on error, clear local state and redirect
       setUser(null);
       setIsAuthenticated(false);
-      window.location.href = '/';
+      window.location.href = dest;
     }
   };
 

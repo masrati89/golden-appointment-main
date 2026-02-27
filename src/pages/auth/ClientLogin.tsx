@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import BottomNav from '@/components/BottomNav';
 import { hasPendingBookingState } from '@/lib/bookingState';
+import { businessHomeUrl } from '@/lib/businessSlug';
 
 // Email validation regex
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -126,11 +127,11 @@ export default function ClientLogin() {
       {/* Home Button */}
       <div className="w-full max-w-md mb-4">
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate(businessHomeUrl())}
           className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors text-sm"
         >
           <Home className="w-4 h-4" />
-          <span>חזרה לדף הבית</span>
+          <span>חזרה לעסק</span>
         </button>
       </div>
 
