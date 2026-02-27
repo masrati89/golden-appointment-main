@@ -113,11 +113,24 @@ serve(async (req) => {
         // ── Step 1: obtain a short-lived JWT from Morning ──────────────
         // SANDBOX mode — switch to https://api.greeninvoice.co.il for production
         const morningBase = "https://sandbox.d.greeninvoice.co.il/api/v1";
-        // Standard browser headers to pass Morning's Cloudflare WAF
-        const morningHeaders = {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+
+        // Full browser-like headers required to pass Cloudflare's Browser Integrity Check.
+        // Cloudflare inspects Origin, Referer, Sec-Fetch-* and sec-ch-ua in addition to
+        // User-Agent — datacenter IPs are blocked without the complete set.
+        const morningHeaders: Record<string, string> = {
+          "Content-Type":    "application/json",
+          "Accept":          "application/json, text/plain, */*",
+          "Accept-Language": "he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7",
+          "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Origin":          "https://app.greeninvoice.co.il",
+          "Referer":         "https://app.greeninvoice.co.il/",
+          "Sec-Fetch-Dest":  "empty",
+          "Sec-Fetch-Mode":  "cors",
+          "Sec-Fetch-Site":  "same-site",
+          "sec-ch-ua":         '"Google Chrome";v="120", "Chromium";v="120", "Not-A.Brand";v="99"',
+          "sec-ch-ua-mobile":  "?0",
+          "sec-ch-ua-platform": '"Windows"',
+          "Connection":      "keep-alive",
         };
         console.log("[morning] Step 1 — fetching auth token");
 
@@ -127,10 +140,14 @@ serve(async (req) => {
           body: JSON.stringify({ id: apiKey, secret: apiSecret }),
         });
 
-        console.log("[morning] token response status:", tokenRes.status);
+        const tokenContentType = tokenRes.headers.get("content-type") ?? "";
+        console.log("[morning] token response status:", tokenRes.status, "| content-type:", tokenContentType);
         if (!tokenRes.ok) {
           const errText = await tokenRes.text().catch(() => "(unreadable)");
-          throw new Error(`Morning auth failed (HTTP ${tokenRes.status}): ${errText}`);
+          const isWaf = tokenContentType.includes("text/html");
+          throw new Error(
+            `Morning auth failed (HTTP ${tokenRes.status}${isWaf ? " — WAF/Cloudflare HTML block" : ""}): ${errText.slice(0, 400)}`
+          );
         }
 
         const tokenData = await tokenRes.json();
@@ -188,10 +205,14 @@ serve(async (req) => {
           }),
         });
 
-        console.log("[morning] response status:", morningRes.status);
+        const paymentContentType = morningRes.headers.get("content-type") ?? "";
+        console.log("[morning] payment form response status:", morningRes.status, "| content-type:", paymentContentType);
         if (!morningRes.ok) {
           const errText = await morningRes.text().catch(() => "(unreadable)");
-          throw new Error(`Morning rejected the request (HTTP ${morningRes.status}): ${errText}`);
+          const isWaf = paymentContentType.includes("text/html");
+          throw new Error(
+            `Morning payment form failed (HTTP ${morningRes.status}${isWaf ? " — WAF/Cloudflare HTML block" : ""}): ${errText.slice(0, 400)}`
+          );
         }
 
         const morningData = await morningRes.json();
