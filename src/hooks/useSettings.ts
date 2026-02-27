@@ -61,6 +61,8 @@ const SAFE_SELECT = [
   'facebook_url',
   'show_instagram',
   'show_facebook',
+  'waze_url',
+  'show_waze',
   // ── Portfolio gallery ────────────────────────────────────────────────
   'show_gallery',
   'custom_images',

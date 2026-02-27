@@ -40,6 +40,8 @@ export default function AdminSettings() {
         show_facebook: settings.show_facebook ?? false,
         instagram_url: settings.instagram_url ?? '',
         facebook_url: settings.facebook_url ?? '',
+        show_waze: (settings as any).show_waze ?? false,
+        waze_url: (settings as any).waze_url ?? '',
       });
     }
   }, [settings]);
@@ -101,6 +103,7 @@ export default function AdminSettings() {
     'whatsapp_api_token', 'whatsapp_float_number', 'working_days',
     'working_hours_end', 'working_hours_start',
     'instagram_url', 'facebook_url', 'show_instagram', 'show_facebook',
+    'waze_url', 'show_waze',
     'show_gallery', 'custom_images', 'instagram_urls',
     'whatsapp_enabled',
     'whatsapp_api_url',
@@ -214,6 +217,20 @@ export default function AdminSettings() {
                   <ToggleRow label="📘 הצג פייסבוק בדף הבית" checked={form.show_facebook} onChange={(v) => update('show_facebook', v)} />
                   {form.show_facebook && (
                     <Field label="קישור לפייסבוק (URL)" value={form.facebook_url} onChange={(v) => update('facebook_url', v)} dir="ltr" placeholder="https://facebook.com/your_page" />
+                  )}
+                </div>
+
+                {/* Waze */}
+                <div className="space-y-2">
+                  <ToggleRow label="🗺️ הצג כפתור Waze בדף הבית" checked={form.show_waze} onChange={(v) => update('show_waze', v)} />
+                  {form.show_waze && (
+                    <Field
+                      label='כתובת או קישור Waze'
+                      value={form.waze_url}
+                      onChange={(v) => update('waze_url', v)}
+                      dir="ltr"
+                      placeholder="תל אביב, רחוב הרצל 1  — או הדבק קישור Waze"
+                    />
                   )}
                 </div>
 

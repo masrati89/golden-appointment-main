@@ -7,6 +7,36 @@
  */
 import { useNavigate } from 'react-router-dom';
 import { Sparkles, Calendar, Heart, Instagram, Facebook, ArrowRight, ArrowDown } from 'lucide-react';
+
+// ─── Waze icon (simplified brand SVG) ────────────────────────
+function WazeIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Body */}
+      <ellipse cx="24" cy="29" rx="17" ry="13" fill="currentColor" fillOpacity="0.18" stroke="currentColor" strokeWidth="2.4"/>
+      {/* Eyes */}
+      <circle cx="18.5" cy="26" r="2.8" fill="currentColor"/>
+      <circle cx="29.5" cy="26" r="2.8" fill="currentColor"/>
+      {/* Smile */}
+      <path d="M18 32 Q24 37 30 32" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" fill="none"/>
+      {/* Antenna dot */}
+      <circle cx="33" cy="12" r="3.2" fill="currentColor"/>
+      <path d="M33 15.2 Q33 21 28.5 24" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" fill="none"/>
+    </svg>
+  );
+}
+
+/** Smart Waze deep-link: raw address → waze.com search; existing Waze/waze:// URL → pass through */
+function getWazeHref(value: string): string {
+  if (
+    value.startsWith('https://waze.com') ||
+    value.startsWith('https://www.waze.com') ||
+    value.startsWith('waze://')
+  ) {
+    return value;
+  }
+  return `https://waze.com/ul?q=${encodeURIComponent(value)}&navigate=yes`;
+}
 import { motion } from 'framer-motion';
 import { useBusiness } from '@/contexts/BusinessContext';
 import { useSettings } from '@/hooks/useSettings';
@@ -212,24 +242,34 @@ function BusinessPageContent() {
           )}
 
           {/* Social */}
-          {(settings?.show_instagram || settings?.show_facebook) && (
+          {(settings?.show_instagram || settings?.show_facebook || (settings as any)?.show_waze) && (
             <motion.section
               className="flex items-center justify-center gap-4 flex-shrink-0 mt-2"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ duration: 0.3, delay: 0.6 }}
+              transition={{ duration: 0.3, delay: 0.7 }}
             >
               {/* M-2: Only render social links that start with https:// to prevent XSS via javascript: URLs */}
-              {settings.show_instagram && settings.instagram_url?.startsWith('https://') && (
+              {settings?.show_instagram && settings.instagram_url?.startsWith('https://') && (
                 <a href={settings.instagram_url} target="_blank" rel="noopener noreferrer"
                   className={`glass-card p-3 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 flex items-center justify-center ${bgImageUrl ? 'bg-white/20 hover:bg-white/30' : 'bg-secondary/50 hover:bg-secondary'}`}>
                   <Instagram className={`w-6 h-6 ${bgImageUrl ? 'text-white' : 'text-foreground'}`} />
                 </a>
               )}
-              {settings.show_facebook && settings.facebook_url?.startsWith('https://') && (
+              {settings?.show_facebook && settings.facebook_url?.startsWith('https://') && (
                 <a href={settings.facebook_url} target="_blank" rel="noopener noreferrer"
                   className={`glass-card p-3 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 flex items-center justify-center ${bgImageUrl ? 'bg-white/20 hover:bg-white/30' : 'bg-secondary/50 hover:bg-secondary'}`}>
                   <Facebook className={`w-6 h-6 ${bgImageUrl ? 'text-white' : 'text-foreground'}`} />
+                </a>
+              )}
+              {(settings as any)?.show_waze && (settings as any)?.waze_url && (
+                <a
+                  href={getWazeHref((settings as any).waze_url)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`glass-card p-3 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 flex items-center justify-center group ${bgImageUrl ? 'bg-white/20 hover:bg-[#33ccff]/30' : 'bg-secondary/50 hover:bg-[#33ccff]/20'}`}
+                >
+                  <WazeIcon className={`w-6 h-6 group-hover:text-[#33ccff] transition-colors ${bgImageUrl ? 'text-white' : 'text-foreground'}`} />
                 </a>
               )}
             </motion.section>
